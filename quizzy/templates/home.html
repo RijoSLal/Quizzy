@@ -1,0 +1,91 @@
+{% load static %}
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Home</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:ital,wght@0,400..700;1,400..700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{% static 'styling/home.css' %}">
+  
+ 
+</head>
+<body class="d-flex justify-content-center align-items-center vh-100 vw-100">
+    <!-- background circles container -->
+    <div id="background-container"></div> 
+    
+    <!-- heading -->
+    <div class="title">Quizzy</div>
+
+    <div class="position-relative d-flex justify-content-center align-items-center">
+        <div class="circle large-circle">
+           <img src="{% static 'images/output-onlinegiftools.gif' %}" alt="">
+        </div>
+        <div class="line"></div>
+        <div class="circle small-circle">
+            <a href="{% url 'eligibility' %}"><img src="{% static 'images/chevron-right-circle.png' %}" alt=""></a>
+        </div>
+    </div>
+
+    <script>
+        const numCircles = 18; // number of random circles
+        const container = document.getElementById("background-container");
+        const colors = ["#69B7FF", "#CBD5E0", "#3182CE", "#6B7280"];
+
+        let circles = [];
+
+        function getRandom(min, max) {
+            return Math.floor(Math.random() * (max - min + 1)) + min;
+        }
+
+        function checkOverlap(newCircle) {
+            return circles.some(circle => {
+                let dx = circle.x - newCircle.x;
+                let dy = circle.y - newCircle.y;
+                let distance = Math.sqrt(dx * dx + dy * dy);
+                return distance < (circle.size / 2 + newCircle.size / 2 + 10); // prevent overlap
+            });
+        }
+
+        function createBackgroundCircles() {
+            const titleHeight = 60; // space for title
+            for (let i = 0; i < numCircles; i++) {
+                let size = getRandom(30, 90); // random size range
+                let newCircle = {
+                    x: getRandom(size / 2, window.innerWidth - size / 2),
+                    y: getRandom(size / 2 + titleHeight, window.innerHeight - size / 2), // avoid title area
+                    size: size
+                };
+
+                // ensure no overlapping (including title)
+                let attempts = 0;
+                while (checkOverlap(newCircle) && attempts < 100) {
+                    newCircle.x = getRandom(size / 2, window.innerWidth - size / 2);
+                    newCircle.y = getRandom(size / 2 + titleHeight, window.innerHeight - size / 2);
+                    attempts++;
+                }
+
+                circles.push(newCircle);
+
+                let circleElement = document.createElement("div");
+                circleElement.classList.add("bg-circle");
+                circleElement.style.width = `${size}px`;
+                circleElement.style.height = `${size}px`;
+
+                circleElement.style.borderColor= colors[getRandom(0, colors.length - 1)];
+                circleElement.style.top = `${newCircle.y}px`;
+                circleElement.style.left = `${newCircle.x}px`;
+
+                container.appendChild(circleElement);
+            }
+        }
+
+        createBackgroundCircles();
+    </script>
+</body>
+</html>

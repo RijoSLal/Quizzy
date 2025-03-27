@@ -1,0 +1,121 @@
+{% load static %}
+
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Resume</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:ital,wght@0,400..700;1,400..700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{% static 'styling/resume.css' %}">
+
+</head>
+<style>
+    #message-container {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        z-index: 1050; /* Ensure it stays on top */
+    }
+    .message-space{
+        background-color: #3182ce77;
+        border-radius: 40px;
+        padding-left: 20px;
+        
+
+    }
+    .no-border:focus {
+        outline: none;
+        box-shadow: none;
+        
+    }
+</style>
+<body class="d-flex align-items-center justify-content-center">
+    {% if messages %}
+    <div class="position-fixed top-0 end-0 p-3" style="z-index: 1050;">
+        {% for message in messages %}
+        <div class="alert alert-{{ message.tags }} alert-dismissible fade show message-space" role="alert">
+            {{ message }}
+            <button type="button" class="btn-close no-border" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+    <div class="container d-flex align-items-center justify-content-center main" >
+        <form method="POST" enctype="multipart/form-data" class="row w-100 h-100">
+            {% csrf_token %}
+  
+            <div class="col-12 col-md-6 d-flex  p-3 py-2 pl-3 canvas h-100 " >
+                <textarea id="textarea"  placeholder="Type your message here..." class="w-100 h-100 " name="description" ></textarea>
+            </div>
+    
+            <div class=" col-12 col-md-6 d-flex flex-column align-items-start justify-content-start p-3">
+               <div class=" w-100 file-contain d-flex justify-content-center">
+                <div class=" file-upload d-flex justify-content-center ">
+
+
+                    <div class="d-flex flex-column align-items-center justify-content-center text-center pt-4">
+                        <input type="file" id="file" name="filename" class="file-input" >
+                        <label for="file" class="file-label">
+                            <img src="{% static 'images/Upload icon.png' %}" alt="Upload" class="upload-image">
+                        </label>
+                        <p class="fw-bold">Drag & Drop your resume here or <label for="file" id="browse" class="fw-bold">click to upload</label></p>
+                        <p class="mx-2 font-below">Supported formates: JPEG, PNG, GIF, MP4, PDF, PSD</p>
+                    </div>
+                    
+                </div>
+            </div>
+              
+                
+                <div class=" d-flex flex-column align-items-start justify-content-center p-3 mt-2 ms-5">
+                    <div class="d-flex align-items-center my-3 list mw-100">
+                        <input type="radio" id="option1" name="choice" value="beginner" class="round" checked>
+                        <label for="option1" class="ms-2 ">Beginner (0-1 years of experience)</label>
+                    </div>
+                
+                    <div class="d-flex align-items-center mt-2 my-3 list">
+                        <input type="radio" id="option2" name="choice" value="intermediate" class="round">
+                        <label for="option2" class="ms-2">Intermediate (1-3 years of experience)</label>
+                    </div>
+                
+                    <div class="d-flex align-items-center mt-2 my-3 list">
+                        <input type="radio" id="option3" name="choice" value="advance" class="round">
+                        <label for="option3" class="ms-2">Advanced (3-6 years of experience)</label>
+                    </div>
+
+                    <div class="d-flex align-items-center mt-2 my-3 list">
+                        <input type="radio" id="option3" name="choice" value="expert" class="round">
+                        <label for="option3" class="ms-2">Expert (6+ years of experience)</label>
+                    </div>
+
+                
+                    <div class="d-flex align-items-center mt-3 w-100">
+                        <input type="range" id="experience-slider" class="form-range w-100" min="10" max="60" step="1" value="10" oninput="updateSliderValue(this.value)" name="time" >
+                        <div class="ms-2 fw-bold d-flex">
+                            <span id="slider-value">10</span>min
+                        </div>
+                    </div>
+
+
+
+
+                </div>
+                
+                <div class="w-100 d-flex justify-content-center align-items-center ">
+                     <button type="submit" class="mt-4 slider w-75">Submit</button>
+                    </div>
+            </div>  
+        </form>
+        
+    </div>
+    <script>
+        function updateSliderValue(value) {
+            document.getElementById('slider-value').textContent = value;
+        }
+    </script>
+    
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

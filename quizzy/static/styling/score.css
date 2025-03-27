@@ -1,0 +1,105 @@
+body{
+    background-color: #F7FAFC;
+    font-family: "Instrument Sans";
+
+}
+
+.heading{ 
+    font-weight: bold;
+    font-size: 37px;
+}
+
+.row{
+    height: 80vh;
+}
+.top-part{
+    height: 27%;
+    border-radius: 30px;
+    
+    
+
+}
+.bottom-part{
+    height: 63%;
+    border-radius: 30px;
+}
+.rate-bar{
+    gap: 40px;
+}
+.outer,.inner{
+    border-radius: 30px;
+}.outer{
+    background-color: #E2E8F0;
+}
+#score,#pdf,#links{
+    background-color: #E2E8F0;
+    box-shadow: 0px 0px 9.8px 1px rgba(0, 0, 0, 0.185);
+}
+#links{
+    overflow-y: scroll;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+.table-part{
+    width: 92%;
+    
+    
+
+}
+#links::-webkit-scrollbar {
+    display: none;
+}
+.table th, .table td {
+            background-color: rgba(173, 216, 230, 0); 
+        }
+
+        .table tr {
+    border-bottom: 1px solid #CBD5E0; 
+}
+
+.table thead tr {
+    border-bottom: 2px solid #CBD5E0;
+}
+#special-link{
+    color: #69B7FF;
+}
+#pdf{
+    height: 25%;
+    min-height: 150px;
+    min-width:300px;
+    padding-top: 12px;
+}
+#download-button{
+    border: none;
+    background-color: transparent;
+    padding-bottom: 17px;
+    color: #69B7FF;
+    text-decoration-line: underline;
+    font-weight: bold;
+
+}
+#color-1{
+    background-color: #3182CE;
+
+}
+#color-2{
+    background-color: #69B7FF;
+}
+#color-3{
+    background-color: #CBD5E0;
+}
+#color-4{
+    background-color: #4A5568;
+}
+.scoring{
+    font-size: xx-large;
+    font-weight: bolder;
+}
+.micro-score{
+    font-weight: bold;
+    color: #69B7FF;
+}
+#score{
+    min-height: 180px;
+}

@@ -1,0 +1,9 @@
+# Ignore compiled Python files
+**/__pycache__/
+__pycache__/
+
+# Ignore environment files
+*.env
+
+
+container/

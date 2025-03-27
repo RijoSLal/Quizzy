@@ -1,0 +1,394 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Interview</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:ital,wght@0,400..700;1,400..700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{% static 'styling/interview.css' %}">
+   
+    
+</head>
+<body class="d-flex justify-content-center align-items-center">
+    <div class="container-fluid">
+        <div class="row g-3 h-100"> 
+            <div class="col-lg-2 d-flex flex-md-column flex-row align-items-center justify-content-center">
+                <div class="left-pill rounded-pill d-flex flex-column justify-content-between mt-1" >
+               
+               <!-- top Section -->
+               <div class=" d-flex flex-column align-items-center mt-4 icons ">
+                   <a href="{% url 'home' %}" class="help"> <img src="{% static 'images/Home (1).png' %}" alt=""></a>
+                   <a href="{% url 'score' %}" class="help"><img src="{% static 'images/Dashboard Circle.png' %}" alt=""></a>
+                   <button type="button" class="help mt-3 mb-3" data-bs-toggle="modal" data-bs-target="#scrollableModal">
+                    <img src="{% static 'images/Database.png' %}" alt="">
+                  </button>
+               
+                   <button type="button" class="help mt-3" data-bs-toggle="modal" data-bs-target="#staticBackdrop">
+                    <img src="{% static 'images/Help circle.png' %}" alt="">
+                  </button>
+               </div>
+           
+               <!-- bottom Section -->
+               <div class="d-flex justify-content-center align-items-end mb-4">
+                   <button type="button" class="custom-button mb-1" data-bs-toggle="modal" data-bs-target="#exampleModal">
+                    <img src="{% static 'images/Setting 3.png' %}" alt="">
+                </button>
+               </div>
+           
+           </div>
+            </div>
+                
+            <div class="col-lg-6  d-flex flex-column align-items-center justify-content-center ">
+                <div class="pill-contain mt-1" >
+                    <div class="top-pill rounded-pill d-flex align-items-center justify-content-between px-5">
+                        <div id="time-h">00h</div>
+                        <div id="time-m">00m</div>
+                        <div id="time-s">00s</div>
+                       
+                    </div>
+                </div>
+                <div class=" d-flex justify-content-center mt-5 circle-container" >
+                    <div class="rounded-circle main-circle">
+                        <img src="{% url 'live' %}" style="object-fit: cover; transform: scaleX(-1);">
+                    </div>
+                    
+                </div>
+    
+                  <!-- chart part -->
+                <div class="d-flex flex-wrap my-1 justify-content-center align-items-center charts-container">
+                    <div id="chart1" class="chart"></div>
+                    <div id="chart2" class="chart"></div>
+                    <div id="chart3" class="chart"></div>
+                    <div id="chart4" class="chart"></div>
+                </div>
+            </div>
+            
+            <div class="col-lg-4 d-flex align-items-center justify-content-center">
+                <div style="height:726px; width:480px;">
+                    <div>
+                        <div class="chat-container mb-3">
+                            <div class="chat-box" id="chat-box">
+                                {% for message in conversation %}
+                                    <div class="chat-message {% if message.speaker == 'human' %}sent{% else %}received{% endif %} d-flex justify-content-center align-items-center">
+                                        <p>{{ message.chat }}</p>
+                                    </div>
+                                {% endfor %}
+                            </div>
+                            <form class="chat-input" id="task-form">
+                                {% csrf_token %}
+                                <button type="button" id="recordButton"><img src="{% static 'images/animation.png' %}" alt=""></button>
+                                <button type="submit" id="sendButton" disabled><img src="{% static 'images/send.png' %}" alt=""></button>
+                            </form>
+                            
+                        </div>
+                    </div>
+                    <div class="d-flex justify-content-center">
+                        <div class="progress bar mb-2" style="height: 30px; width: 95%;">
+                            <div class="progress-bar bar" id="bar" role="progressbar" style="width: 50%;" aria-valuenow="25" aria-valuemin="0" aria-valuemax="100"></div>
+                          </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- button trigger modal -->
+
+  
+  <!-- modal 1 -->
+  <div class="modal fade" id="staticBackdrop" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h1 class="modal-title fs-5" id="staticBackdropLabel">Help!</h1>
+          
+        </div>
+        <div class="modal-body">
+            <p>
+                <strong>Help Guide – AI Interviewer App</strong><br><br>
+                Welcome to the AI Interviewer App! Follow these instructions to use the app effectively.<br><br>
+              
+                <strong>Getting Started</strong><br>
+                - <strong>Face the Camera</strong> – The app requires facial detection to analyze your emotions. If your face is not visible, it won't work properly.<br>
+                - <strong>Sit Straight</strong> – Maintain an upright posture for better recognition.<br><br>
+              
+                <strong>How It Works</strong><br>
+                - <strong>Emotion & Posture Score Circles</strong> – Four circles at the bottom display different scores based on perception, including emotion and posture detection.<br>
+                - <strong>Chatbox & Microphone</strong> – Click the microphone symbol in the chatbox to record your answer.<br>
+                - <strong>Send Button</strong> – After answering, click the send button to proceed to the next question.<br>
+                - <strong>AI Questions</strong> – The AI will automatically ask the next question after analyzing your response.<br><br>
+              
+                <strong>Settings & Customization</strong><br>
+                - <strong>Change AI Voice</strong> – Go to settings to modify the AI’s voice to your preference.<br><br>
+                 
+                - <strong>Automatic Redirection</strong> – Time bar indicates the remaining time, and once it is completed, the app will automatically redirect to the score screen.<br><br>
+               
+                <strong>Navigation</strong><br>
+                - <strong>Return to Home</strong> – Click the home button to return to the main screen at any time.<br><br>
+              
+               
+              </p>
+            
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+        
+        </div>
+      </div>
+    </div>
+  </div>
+
+      <!-- modal 2 -->
+    <div class="modal fade" id="exampleModal" tabindex="-1" aria-labelledby="exampleModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="exampleModalLabel">Select an Option</h5>
+                </div>
+                <div class="modal-body">
+                    <form id="optionForm">
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="option" id="option1" value="male" required checked>
+                            <label class="form-check-label" for="option1">Male</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="option" id="option2" value="female" required>
+                            <label class="form-check-label" for="option2">Female</label>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-primary" id="saveBtn">Save</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+     <!-- modal 3 -->
+    <div class="modal fade" id="scrollableModal" tabindex="-1" aria-labelledby="modalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-scrollable">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title" id="modalLabel">Profile</h5>
+            </div>
+            <div class="modal-body">
+               <h3>ATS : {{ ats }}%</h3>
+               <p>{{ summary }}</p>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+          </div>
+        </div>
+      </div>
+   
+    <script>
+        let mediaRecorder;
+        let audioChunks = [];
+        let isRecording = false;
+       
+        const maxRecordingTime = 20; // max audio recording time in seconds
+        
+    
+        document.getElementById("recordButton").addEventListener("click", async () => {
+            if (!isRecording) {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                mediaRecorder = new MediaRecorder(stream);
+                audioChunks = [];
+    
+                mediaRecorder.ondataavailable = event => audioChunks.push(event.data);
+    
+                mediaRecorder.onstop = () => {
+                    document.getElementById("sendButton").disabled = audioChunks.length === 0;
+                };
+    
+                mediaRecorder.start();
+                isRecording = true;
+                document.getElementById("recordButton").style.backgroundColor = "#6ba2d6";
+               
+    
+                // auto-stop after maxRecordingTime
+                setTimeout(() => {
+                    if (isRecording) {
+                        mediaRecorder.stop();
+                        isRecording = false;
+                        document.getElementById("recordButton").style.backgroundColor = "#3182CE";
+                    }
+                }, maxRecordingTime * 1000);
+            } else {
+                mediaRecorder.stop();
+                isRecording = false;
+                document.getElementById("recordButton").style.backgroundColor = "#3182CE";
+            }
+        });
+    
+        document.getElementById("task-form").addEventListener("submit", async function(event) {
+            event.preventDefault();  // prevent page reload
+    
+            if (audioChunks.length === 0) {
+                alert("No audio recorded!");
+                return;
+            }
+    
+            let formData = new FormData(this);
+            const csrfToken = document.querySelector("[name=csrfmiddlewaretoken]").value;
+            const audioBlob = new Blob(audioChunks, { type: "audio/wav" });
+            formData.append("audio", audioBlob, "recording.wav");
+            
+            const selectedOption = document.querySelector('input[name="option"]:checked');
+                if (selectedOption) {
+                    formData.append("option", selectedOption.value);
+                }
+
+            let chatBox = document.getElementById("chat-box");
+    
+            fetch("{% url 'interview' %}", {
+                method: "POST",
+                headers: { "X-CSRFToken": csrfToken, "X-Requested-With": "XMLHttpRequest" , },
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                chatBox.innerHTML = "";  // clear chat
+                data.conversation.forEach(msg => {
+                    let div = document.createElement("div");
+                    div.classList.add("chat-message", msg.speaker === "human" ? "sent" : "received");
+                    div.innerHTML = `<p>${msg.chat}</p>`;
+                    chatBox.appendChild(div);
+                });
+                if (data.audio) {
+                    const audio = new Audio(`data:audio/mp3;base64,${data.audio}`);
+                    audio.play();
+                }
+    
+                // reset recording
+                document.getElementById("sendButton").disabled = true;
+                audioChunks = [];
+            })
+            .catch(error => console.error("Error:", error));
+        });
+
+
+        function scrollToBottom() {
+        var chatBox = document.getElementById("chat-box");
+        chatBox.scrollTop = chatBox.scrollHeight;
+    }
+
+    // scroll to bottom when the page loads
+    window.onload = scrollToBottom;
+
+    // scroll to bottom when new messages are added 
+    const chatBox = document.getElementById("chat-box");
+    const observer = new MutationObserver(scrollToBottom);
+    observer.observe(chatBox, { childList: true });
+    </script>
+   
+      
+      <script>
+        var chartData = [
+          { id: "chart1", value: 1, color: "#3182CE", emoji: "😏" },
+          { id: "chart2", value: 1, color: "#69B7FF", emoji: "🧐" },
+          { id: "chart3", value: 1, color: "#CBD5E0", emoji: "😱" },
+          { id: "chart4", value: 1, color: "#4A5568", emoji: "😊" }
+        ];
+      
+        var charts = {};
+      
+        chartData.forEach(data => {
+          var options = {
+            series: [data.value],
+            chart: {
+              height: 160,
+              width: 160,
+              type: 'radialBar',
+              sparkline: { enabled: true }
+            },
+            plotOptions: {
+              radialBar: {
+                hollow: { size: '38%' },
+                track: { strokeWidth: '120%' },
+                dataLabels: {
+                  name: { show: false }, // hide default labels
+                  value: {
+                    show: true,
+                    formatter: function () {
+                      return data.emoji; //  display emoji instead of percentage
+                    },
+                    fontSize: "24px",
+                    offsetY: 7, // adjust size for emoji
+                  }
+                }
+              }
+            },
+            fill: { colors: [data.color] },
+            stroke: { lineCap: 'round' }
+          };
+      
+          charts[data.id] = new ApexCharts(document.querySelector(`#${data.id}`), options);
+          charts[data.id].render();
+        });
+      
+        function updatePrediction() {
+          fetch("{% url 'prediction' %}")
+            .then(response => response.json())
+            .then(data => {
+              if (data.prediction && Array.isArray(data.prediction)) {
+                data.prediction.forEach((value, index) => {
+                  if (chartData[index]) {
+                    chartData[index].value = value;
+                    charts[chartData[index].id].updateSeries([value]);
+                  }
+                });
+              }
+            })
+            .catch(error => console.error("Error fetching prediction:", error));
+        }
+      
+        setInterval(updatePrediction, 1000);  // fetch prediction every 1/2 second
+
+
+
+
+        function checkAndRedirect() {
+            fetch("/time")
+                .then(response => response.json()) // convert response to JSON
+                .then(data => {
+                    if (data.redirect === true) { // if response is true, redirect
+                        window.location.pathname = "/score";
+                    } else {
+                        // update progress bar
+                        document.getElementById("bar").style.width = data.time_progress + "%";
+                        document.getElementById("bar").setAttribute("aria-valuenow", Math.round(data.time_progress));
+        
+                        // use data.time (remaining time in seconds)
+                        let totalSeconds = Math.round(data.time);
+                        let hours = Math.floor(totalSeconds / 3600);
+                        let minutes = Math.floor((totalSeconds % 3600) / 60);
+                        let seconds = totalSeconds % 60;
+        
+                        // format to always show two digits (e.g., "09s" instead of "9s")
+                        document.getElementById("time-h").textContent = `${String(hours).padStart(2, "0")}h`;
+                        document.getElementById("time-m").textContent = `${String(minutes).padStart(2, "0")}m`;
+                        document.getElementById("time-s").textContent = `${String(seconds).padStart(2, "0")}s`;
+                    }
+                })
+                .catch(error => console.error("Error:", error)); // errors
+        }
+        
+        // run check every second (1000ms)
+        setInterval(checkAndRedirect, 1000);
+      </script>
+     
+     
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js"></script>
+  
+</body>
+</html>
