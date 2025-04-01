@@ -15,7 +15,7 @@ numpy==2.2.4
 ollama==0.4.7
 opencv_python==4.10.0.84
 opencv_python_headless==4.10.0.84
-pdfminer==20191125
+pdfminer
 pydantic==2.10.6
 pydub==0.25.1
 python-dotenv==1.1.0
