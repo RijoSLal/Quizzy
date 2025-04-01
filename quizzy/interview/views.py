@@ -46,11 +46,13 @@ class Home(APIView):
     def get(self,request: HttpRequest) -> Response:
         logger.info("Loading home page.")
         request.session["validation"] = False
-        for key in ("history", "eval"):
+        request.session["completed"] = True
+        for key in ("history", "eval","time"):
             if key in request.session:
                 del request.session[key]
         capture.reset_updates()
         rag_instance.score_reset()
+
         return Response(template_name="home.html")
 
 
@@ -88,7 +90,8 @@ class Myview(APIView):
         """
         logger.info("Loading resume validation page.")
         request.session["validation"] = False
-        for key in ("history", "eval"):
+        request.session["completed"] = True
+        for key in ("history", "eval","time"):
             if key in request.session:
                 del request.session[key]
         capture.reset_updates()
@@ -228,7 +231,7 @@ class Interview(APIView):
         Returns:
             Response | HttpResponse: The rendered interview page or a redirect response.
         """
-        if not request.session.get("validation"):
+        if not request.session.get("validation") or not request.session.get("completed",True):
             logger.warning("Validation missing in session redirecting to eligibility page")
             return redirect("eligibility")
         
@@ -478,6 +481,7 @@ class Check(APIView):
             for key in ("history", "eval"):
                 if key in request.session:
                     del request.session[key]
+            request.session["completed"]=False
             return JsonResponse({"redirect":True})
         # logger.info(f"Time remaining: {remaining_time} seconds. Progress: {progress}%")
         return JsonResponse(

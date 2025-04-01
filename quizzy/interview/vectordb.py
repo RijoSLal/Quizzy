@@ -5,7 +5,10 @@ from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from dotenv import load_dotenv
 import logging
+
+
 logger = logging.getLogger("interview")
+
 load_dotenv()
 
 class ChromaDB:

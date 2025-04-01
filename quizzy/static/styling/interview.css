@@ -213,3 +213,42 @@ box-shadow: 0px 0px 10px 3px rgba(0, 0, 0, 0.247);
 .circle-container{
     max-width: 99%;
 }
+
+@media (max-width: 768px) {
+    .left-pill {
+      flex-direction: row !important; 
+      height: 60px;
+      width: 97vw;
+      justify-content: space-between !important;
+      align-items: center !important; 
+    }
+    
+    .one, .two {
+      flex-direction: row !important;
+      margin: 0 !important;
+      padding: 0 !important;
+    }
+    
+    .icons.one {
+      width: auto !important;
+      margin-top: 0 !important;
+      margin-left: 10px !important;
+      gap: 10px;
+    }
+    
+    .two {
+      margin-bottom: 0 !important;
+     
+    }
+    
+    .left-pill a, 
+    .left-pill button {
+      margin: 0 5px !important; 
+    }
+    
+    .help, .custom-button {
+      margin-top: 0 !important;
+      margin-bottom: 0 !important;
+    }
+    
+  }

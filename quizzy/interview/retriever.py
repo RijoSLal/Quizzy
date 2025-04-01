@@ -8,12 +8,11 @@ from langchain.chat_models import init_chat_model
 from pydantic import BaseModel, Field
 import logging
 from transformers import TFAutoModelForSeq2SeqLM, AutoTokenizer
+
+
 logger = logging.getLogger("interview")
+
 load_dotenv()
-
-# genai.configure(api_key=os.getenv("APIKEY"))
-# model = genai.GenerativeModel("gemini-2.0-flash") 
-
 
 client = Groq(
     api_key=os.getenv("GROQ"),
@@ -242,7 +241,7 @@ class RAG:
             # inputs = tokenizer(self.resume, return_tensors="tf", truncation=True)  # no max_length here
             # summary_ids = model.generate(**inputs, max_length=150, num_beams=4, early_stopping=True)  # summary length
             # summary = tokenizer.decode(summary_ids[0], skip_special_tokens=True)
-            logger.info(f"Summarization of candidate profile completed")
+            # logger.info(f"Summarization of candidate profile completed")
             # return summary
         except Exception as e:
             logger.error(f"Unexpected error happened in summarization : {e}")

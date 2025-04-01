@@ -22,7 +22,7 @@
                 <div class="left-pill rounded-pill d-flex flex-column justify-content-between mt-1" >
                
                <!-- top Section -->
-               <div class=" d-flex flex-column align-items-center mt-4 icons ">
+               <div class=" d-flex flex-column align-items-center mt-4 icons one">
                    <a href="{% url 'home' %}" class="help"> <img src="{% static 'images/Home (1).png' %}" alt=""></a>
                    <a href="{% url 'score' %}" class="help"><img src="{% static 'images/Dashboard Circle.png' %}" alt=""></a>
                    <button type="button" class="help mt-3 mb-3" data-bs-toggle="modal" data-bs-target="#scrollableModal">
@@ -35,7 +35,7 @@
                </div>
            
                <!-- bottom Section -->
-               <div class="d-flex justify-content-center align-items-end mb-4">
+               <div class="d-flex justify-content-center align-items-end mb-4 two">
                    <button type="button" class="custom-button mb-1" data-bs-toggle="modal" data-bs-target="#exampleModal">
                     <img src="{% static 'images/Setting 3.png' %}" alt="">
                 </button>
@@ -56,6 +56,7 @@
                 <div class=" d-flex justify-content-center mt-5 circle-container" >
                     <div class="rounded-circle main-circle">
                         <img src="{% url 'live' %}" style="object-fit: cover; transform: scaleX(-1);">
+                        
                     </div>
                     
                 </div>
@@ -195,7 +196,7 @@
         let audioChunks = [];
         let isRecording = false;
        
-        const maxRecordingTime = 20; // max audio recording time in seconds
+        const maxRecordingTime = 30; // max audio recording time in seconds
         
     
         document.getElementById("recordButton").addEventListener("click", async () => {
@@ -352,7 +353,7 @@
             .catch(error => console.error("Error fetching prediction:", error));
         }
       
-        setInterval(updatePrediction, 1000);  // fetch prediction every 1/2 second
+        setInterval(updatePrediction, 3000);  // fetch prediction every 3 second
 
 
 
@@ -386,6 +387,18 @@
         // run check every second (1000ms)
         setInterval(checkAndRedirect, 1000);
       </script>
+
+      <script>
+        async function startWebcam() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                document.getElementById('webcam').srcObject = stream;
+            } catch (error) {
+                console.error("Error accessing webcam:", error);
+            }
+        }
+        startWebcam();
+    </script>
      
      
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js"></script>
