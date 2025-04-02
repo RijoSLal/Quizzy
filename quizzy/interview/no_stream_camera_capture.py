@@ -1,5 +1,4 @@
 import cv2
-import threading
 import numpy as np
 from keras.applications.mobilenet_v3 import preprocess_input # type: ignore
 import mlflow
@@ -21,68 +20,14 @@ mp_face_mesh = mp.solutions.face_mesh
 face_mesh = mp_face_mesh.FaceMesh(min_detection_confidence=0.5)
 
 
+
 class VideoCamera(object):
-
-    """
-    This class uses a vision model to predict emotions from live webcam video.
-    It implements a singleton pattern to ensure only one instance of the camera is used.
-    """
-    _instance = None  # single instance singleton used because to access video cam in single obj
-
-    def __new__(cls, *args, **kwargs):
-        
-        """
-        Ensures only a single instance of VideoCamera is created.
-        Initializes the camera on the first instantiation.
-        """
-
-        if cls._instance is None:
-            cls._instance = super(VideoCamera, cls).__new__(cls)
-            # cls._instance._init_camera()
-        return cls._instance
-    
     def __init__(self):
-        """
-        Initializes the video capture, validates camera accessibility,
-        and starts a separate thread for continuous frame capture.
-
-        """
-        if hasattr(self, "video"):  # Prevent re-initialization
-            return
-
-        self.video = cv2.VideoCapture(0)
-        if not self.video.isOpened():
-            logger.error("Camera cannot be accessed")
-            raise RuntimeError("Camera could not be opened!")
-            
-            
-        self.grabbed, self.frame = self.video.read()
-        if self.frame is None:
-            logger.error("Frames cannot be accessed")
-            raise RuntimeError("No frame captured! Check camera connection.")
-        
         self.running = True
         self.counts = [0] * 3  # Counts for [0, 1, 2]
         self.total = 0  # Total frames processed
         self.pos_count = 0  # Count occurrences where pos is True
-        self.p = [0, 0, 0, 0]  # Probabilities
-        threading.Thread(target=self.update, daemon=True).start()
-    
-    def release(self)-> None:
-        """
-        Releases the video capture object and stops the camera.
-        """
-        self.running = False
-        self.video.release() #to stop camera
-
-    def reset_updates(self) -> None:
-        """
-        Resets the updated probabilities
-        """
-        self.counts = [0] * 3  # Counts for [0, 1, 2]
-        self.total = 0  # Total frames processed
-        self.pos_count = 0  # Count occurrences where pos is True
-        self.p = [0, 0, 0, 0]  # Probabilities
+        self.p = [0, 0, 0, 0]  # Probabilities 
 
     def detect_head_down(self, nose: tuple[int, int], left_eye: tuple[int, int], right_eye: tuple[int, int]) -> bool:
         """
@@ -115,7 +60,7 @@ class VideoCamera(object):
         lm = face_landmarks.landmark[lm_id]
         return int(lm.x * w), int(lm.y * h)
 
-    def get_frame(self) -> bytes:
+    def get_frame(self,frame) -> bytes:
         """
         Captures a frame, processes facial landmarks, detects emotions and head position,
         and encodes the frame into JPEG format.
@@ -123,7 +68,7 @@ class VideoCamera(object):
         Returns:
             bytes: Encoded JPEG image bytes.
         """
-        image = self.frame
+        image = frame
         h, w, _ = image.shape  # Frame dimensions
         frame_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)  # Convert BGR to RGB
 
@@ -195,39 +140,12 @@ class VideoCamera(object):
             list[float]: List containing emotion probabilities and head position probability.
         """
         return self.p
-
-    def update(self) -> None:
+    
+    def reset_updates(self) -> None:
         """
-        Continuously updates the latest frame from the video capture in a loop.
+        Resets the updated probabilities
         """
-        while True:
-            (self.grabbed, self.frame) = self.video.read()
-
-def generate_frames(camera:VideoCamera):
-    """
-    Continuously generates frames from the VideoCamera instance and formats them 
-    for HTTP multipart streaming.
-
-    Args:
-        camera (VideoCamera): The instance of VideoCamera.
-
-    Yields:
-        bytes: Encoded JPEG frames in multipart format.
-    """
-    while True:
-        try:
-            frame: bytes = camera.get_frame()
-            if frame is None:
-                continue
-
-            yield (b'--frame\r\n'
-                   b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n\r\n')
-
-        except Exception as e:
-            logger.error(f"Frame generation error: {str(e)}")
-            break  # break if there is an error
-
-    camera.release() 
-
-
-
+        self.counts = [0] * 3  # Counts for [0, 1, 2]
+        self.total = 0  # Total frames processed
+        self.pos_count = 0  # Count occurrences where pos is True
+        self.p = [0, 0, 0, 0]  # Probabilities

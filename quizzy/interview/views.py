@@ -6,7 +6,7 @@ from rest_framework.response import Response # type: ignore
 from rest_framework.renderers import TemplateHTMLRenderer # type: ignore
 from rest_framework import status # type: ignore
 from django.http import StreamingHttpResponse
-from . import resume_management,retriever,speech,scrape,camera_capture
+from . import no_stream_camera_capture, resume_management,retriever,speech,scrape,camera_capture
 from django.shortcuts import redirect
 from django.core.files.uploadedfile import UploadedFile
 from dotenv import load_dotenv
@@ -21,19 +21,37 @@ from reportlab.pdfgen import canvas
 from textwrap import wrap
 import logging
 from django.contrib import messages
+import numpy as np 
+import cv2
 
 logger = logging.getLogger("interview")
 load_dotenv()
 
 # Create your views here.
 
-capture=camera_capture.VideoCamera()
+
+capture=no_stream_camera_capture.VideoCamera() #change to camera_capture for steaming webcamp data to server
 
 rag_instance=retriever.RAG()
 model = whisper.load_model("base")
 
+class SessionMixin: 
+    """Mixin to reset session-related data and updates."""
 
-class Home(APIView):
+    def reset_session(self,request : HttpRequest) -> None:
+        """Resets session validation status and removes unnecessary session data."""
+        request.session["validation"] = False
+        request.session["completed"] = True
+        for key in ("history", "eval","time"):
+            if key in request.session:
+                del request.session[key]
+        capture.reset_updates()
+        rag_instance.score_reset()
+
+
+
+
+class Home(APIView, SessionMixin):
     """
     API view for rendering the home page.
 
@@ -45,18 +63,11 @@ class Home(APIView):
 
     def get(self,request: HttpRequest) -> Response:
         logger.info("Loading home page.")
-        request.session["validation"] = False
-        request.session["completed"] = True
-        for key in ("history", "eval","time"):
-            if key in request.session:
-                del request.session[key]
-        capture.reset_updates()
-        rag_instance.score_reset()
-
+        self.reset_session(request)
         return Response(template_name="home.html")
 
 
-class Myview(APIView):
+class Myview(APIView, SessionMixin):
     """
     View class for handling resume validation.
 
@@ -89,13 +100,7 @@ class Myview(APIView):
             Response: Renders the "resume.html" template.
         """
         logger.info("Loading resume validation page.")
-        request.session["validation"] = False
-        request.session["completed"] = True
-        for key in ("history", "eval","time"):
-            if key in request.session:
-                del request.session[key]
-        capture.reset_updates()
-        rag_instance.score_reset()
+        self.reset_session(request)
         return Response(template_name="resume.html")
     
     
@@ -355,7 +360,7 @@ class Score(APIView):
 
         vision_system=capture.p
 
-        perception=round((vision_system[0]+vision_system[1])-vision_system[2],2)
+        perception=abs(round((vision_system[0]+vision_system[1])-vision_system[2],2))
         
         posture=round((100-vision_system[3]),2)
 
@@ -433,6 +438,49 @@ class Cam(APIView):
             return Response(
                 {"error":"Camera stream error"},status=500
                 ) 
+        
+class No_Stream_Cam(APIView):
+    """
+    API endpoint for handling non-backend streaming image data.
+    
+    This view accepts a POST request containing a base64-encoded image. It decodes the image,
+    processes it into a NumPy array, and passes it to the `capture.get_frame` method for further handling.
+    
+    Attributes:
+        None
+    
+    Methods:
+        post(request: HttpRequest) -> Response:
+            Handles the incoming image data, decodes it, and forwards the frame for processing.
+    
+    Request Payload:
+        - image (str): Base64-encoded image string.
+    
+    Response:
+        - 200 OK: {'status': 'success'} if the image is processed successfully.
+        - 500 Internal Server Error: {'status': 'error'} if an error occurs.
+    """
+    def post(self, request: HttpRequest) -> Response:
+        
+        image_data = request.data.get('image', '')
+        try:
+            if not image_data:
+                return Response({'status': 'error'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+            _, encoded_data = image_data.split('base64,', 1)
+            decoded_image = base64.b64decode(encoded_data)
+            
+            np_arr = np.frombuffer(decoded_image, np.uint8)
+            
+            frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+            
+            capture.get_frame(frame) 
+            
+            return Response({'status': 'success'}, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            logger.error(f"Error occured in the non backend streaming image processing : {e}")
+            return Response({'status': 'error'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)   
         
 class PredictionView(APIView):
     """  

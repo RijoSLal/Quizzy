@@ -77,8 +77,10 @@ class Resume:
 
         except Exception as e:
             logger.error(f"Domain&Name extraction failed :{str(e)}")
-            return {"candidate":"candidate",
-                    "job":"job"}
+            return {
+                    "candidate":"candidate",
+                    "job":"job"
+                }
 
     def ats_score_checker(self,file: str,des: str) -> int:
         """
