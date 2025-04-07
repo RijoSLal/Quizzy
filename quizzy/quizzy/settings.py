@@ -14,6 +14,8 @@ from pathlib import Path
 import os 
 from dotenv import load_dotenv
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
+
+# os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 load_dotenv()
@@ -29,7 +31,7 @@ SECRET_KEY = os.getenv("DJANGO")
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['*']
 
 
 # Application definition
@@ -131,17 +133,20 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.1/howto/static-files/
 
-STATIC_URL = "static/"
+STATIC_URL = "/static/"
 STATICFILES_DIRS=[ 
     BASE_DIR / "static"
 ]
+
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 
-import os
+
 
 LOGGING = {
     "version": 1,

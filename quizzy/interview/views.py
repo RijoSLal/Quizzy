@@ -49,8 +49,6 @@ class SessionMixin:
         rag_instance.score_reset()
 
 
-
-
 class Home(APIView, SessionMixin):
     """
     API view for rendering the home page.

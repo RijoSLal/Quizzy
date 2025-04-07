@@ -78,7 +78,7 @@ class ChromaDB:
 
         selected_doc = random.choice(available_docs)  # select one at random
         self.used_ids.add(selected_doc["id"])  # mark as used
-        logger.info(f"Random document with ID {selected_doc["id"]} extracted") 
+        logger.info(f"Random document with ID {selected_doc['id']} extracted") 
         return selected_doc["content"]
 
     def insert_into_chroma(self,extracted_text: str) -> None:

@@ -1,7 +1,5 @@
 import edge_tts # type: ignore
 from io import BytesIO
-from pydub import AudioSegment # type: ignore
-from pydub.playback import play # type: ignore
 import logging
 logger = logging.getLogger("django")
 
@@ -40,6 +38,6 @@ async def text_to_speech(text: str, voice: str|None = None, rate:int=0, pitch:in
             return audio_buffer.getvalue() 
         
         except Exception as e:
-             logger.error(f"edge_tts faced a major error: {str(e)}",exc_info=True)
+            logger.error(f"edge_tts faced a major error: {str(e)}",exc_info=True)
              
 

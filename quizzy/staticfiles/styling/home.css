@@ -1,0 +1,98 @@
+body,html {
+            
+    height: 100%;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    overflow-x: hidden;
+    background-color: #F7FAFC;
+    
+ 
+}
+
+/* title */
+.title {
+    position: absolute;
+    top: 30px;
+    left: 50vw;
+    transform: translateX(-50%);
+    font-size: 60px;
+    font-weight: bolder;
+    color:  #2D3748;
+    text-align: center;
+    z-index: 10;
+    font-family: "Instrument Sans";
+    
+}
+
+/* foreground circles */
+.circle {
+    border-radius: 50%;
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+}
+/* large-crcle, small-circle, line -> hover element*/
+.large-circle {
+    
+    width: 340px;
+    height: 340px;
+    background-color: rgb(255, 255, 255);
+    top: 50%;
+    transform: translate(-50%, -50%);
+    border: 23px solid  #2D3748;
+    overflow: hidden; 
+}
+
+.small-circle {
+    width: 110px;
+    height: 110px;
+    background-color: rgb(255, 255, 255);
+    top: calc(50% + 200px);
+    border: 15px solid #2D3748;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.line {
+    width: 15px;
+    height: 140px;
+    background-color: #2D3748;
+    position: absolute;
+    left: 50%;
+    top: calc(50% + 150px);
+    transform: translateX(-50%);
+    
+}
+
+/* background circles */
+.bg-circle {
+    position: absolute;
+    border-radius: 50%;
+    animation: pulse 2s infinite alternate ease-in-out;
+    border: 11px solid white;
+    background-color: rgb(255, 255, 255);
+    
+}
+
+@keyframes pulse {
+    0% { transform: scale(1); }
+    100% { transform: scale(1.2); }
+}
+.large-circle img {
+    transform: translateY(10%);
+    transform: translateX(-1%);
+    
+    width: 100%;
+    height: 100%;
+    border-radius: 50%; /* keep it circular */
+    object-fit: cover; /* ensures the image fills the circle */
+}
+.small-circle img:hover{
+    transform: scale(1.04) ;
+}
+.small-circle img {
+    transition: transform 0.2s ease-in-out; /* duration of booming */
+    
+}

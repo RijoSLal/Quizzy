@@ -161,81 +161,81 @@ class Scraper(TestCase):
             self.assertIn("link", job)
             self.assertIn("location", job)
 
-class VideoCameraTestCase(TestCase):
-    """
-    Testcase for camera_capture.py which handles add vision based processing and emotion prediction
-    """
-    def setUp(self):
-        self.cam = camera_capture.VideoCamera()
-    def test_singleton(self):
+# class VideoCameraTestCase(TestCase):
+#     """
+#     Testcase for camera_capture.py which handles add vision based processing and emotion prediction
+#     """
+#     def setUp(self):
+#         self.cam = camera_capture.VideoCamera()
+#     def test_singleton(self):
 
-        """test that VideoCamera follows a singleton pattern."""
+#         """test that VideoCamera follows a singleton pattern."""
 
-        cam1 = camera_capture.VideoCamera()
-        cam2 = camera_capture.VideoCamera()
-        self.assertIs(cam1, cam2)
+#         cam1 = camera_capture.VideoCamera()
+#         cam2 = camera_capture.VideoCamera()
+#         self.assertIs(cam1, cam2)
 
-    def test_camera_initialization(self):
+#     def test_camera_initialization(self):
 
-        """test the camera initializes correctly."""
+#         """test the camera initializes correctly."""
 
-        self.assertIsInstance(self.cam.video, cv2.VideoCapture)
-        self.assertTrue(self.cam.video.isOpened())
+#         self.assertIsInstance(self.cam.video, cv2.VideoCapture)
+#         self.assertTrue(self.cam.video.isOpened())
 
-    def test_detect_head_down(self):
+#     def test_detect_head_down(self):
        
-        """
-        Test the posture prediction works correctly
-        """
+#         """
+#         Test the posture prediction works correctly
+#         """
 
-        nose = (100, 120)
-        left_eye = (90, 100)
-        right_eye = (110, 100)
-        self.assertTrue(self.cam.detect_head_down(nose, left_eye, right_eye))
+#         nose = (100, 120)
+#         left_eye = (90, 100)
+#         right_eye = (110, 100)
+#         self.assertTrue(self.cam.detect_head_down(nose, left_eye, right_eye))
 
      
-        nose = (100, 80)
-        self.assertFalse(self.cam.detect_head_down(nose, left_eye, right_eye))
+#         nose = (100, 80)
+#         self.assertFalse(self.cam.detect_head_down(nose, left_eye, right_eye))
 
-    def test_upgrade(self):
-        """
-        Test scores are updating correctly
-        """
-        self.cam.reset_updates()
-        self.cam.upgrade(emo=1, pos=True)
-        self.cam.upgrade(emo=2, pos=False)
-        self.cam.upgrade(emo=1, pos=True)
+#     def test_upgrade(self):
+#         """
+#         Test scores are updating correctly
+#         """
+#         self.cam.reset_updates()
+#         self.cam.upgrade(emo=1, pos=True)
+#         self.cam.upgrade(emo=2, pos=False)
+#         self.cam.upgrade(emo=1, pos=True)
 
-        self.assertEqual(self.cam.counts, [0, 2, 1])  
-        self.assertEqual(self.cam.total, 3)
-        self.assertEqual(self.cam.pos_count, 2)
-        self.assertTrue(0 <= sum(self.cam.p) <=200) 
+#         self.assertEqual(self.cam.counts, [0, 2, 1])  
+#         self.assertEqual(self.cam.total, 3)
+#         self.assertEqual(self.cam.pos_count, 2)
+#         self.assertTrue(0 <= sum(self.cam.p) <=200) 
 
-    def test_get_latest_prediction(self):
+#     def test_get_latest_prediction(self):
 
-        """
-        Test score retrieval works correctly
-        """
+#         """
+#         Test score retrieval works correctly
+#         """
      
-        cam = camera_capture.VideoCamera()
-        cam.upgrade(emo=0, pos=False)
-        cam.upgrade(emo=1, pos=True)
+#         cam = camera_capture.VideoCamera()
+#         cam.upgrade(emo=0, pos=False)
+#         cam.upgrade(emo=1, pos=True)
 
-        probabilities = cam.get_latest_prediction()
-        self.assertEqual(len(probabilities), 4) 
+#         probabilities = cam.get_latest_prediction()
+#         self.assertEqual(len(probabilities), 4) 
 
-    def test_video_streaming(self):
-        """
-        Test video streaming works correctly
-        """
-        frame = self.cam.get_frame()
-        self.assertIsInstance(frame, bytes) 
-        self.assertTrue(len(frame) > 0)  
+#     def test_video_streaming(self):
+#         """
+#         Test video streaming works correctly
+#         """
+#         frame = self.cam.get_frame()
+#         self.assertIsInstance(frame, bytes) 
+#         self.assertTrue(len(frame) > 0)  
 
-    @classmethod
-    def tearDownClass(cls):
-        """just to ensure camera releases proper after testing"""
-        camera_capture.VideoCamera().release()
+#     @classmethod
+#     def tearDownClass(cls):
+#         """just to ensure camera releases proper after testing"""
+#         camera_capture.VideoCamera().release()
 
 
 

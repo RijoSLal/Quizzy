@@ -18,6 +18,9 @@ Including another URLconf
 
 from django.urls import path
 from .views import Myview ,Interview,Cam,PredictionView,Home,Check,Score,No_Stream_Cam
+from django.conf import settings
+from django.conf.urls.static import static
+
 urlpatterns = [
     path("",Home.as_view(),name="home"),
     path("eligibility/",Myview.as_view(),name="eligibility"),
@@ -28,4 +31,5 @@ urlpatterns = [
     path("time/",Check.as_view(),name="time"),
     path("score/",Score.as_view(),name="score"),
     
-]
+] + static(settings.STATIC_URL, document_root=settings.STATICFILES_DIRS[0])
+
