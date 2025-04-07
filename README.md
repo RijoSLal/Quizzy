@@ -8,7 +8,7 @@ Built on Django, Quizzy orchestrates a modular architecture where core machine l
 
 ## Demo
 
-📺 **Video Overview**  
+📹 **Video Overview**  
 ![Quizzy Demo](https://github.com/RijoSLal/my-portfolio/blob/main/images/quizzy.png)
 Watch the full walkthrough of how Quizzy functions and performs an AI-driven interview:  
 [YouTube Demo Link](https://www.youtube.com/watch?v=YOUR_VIDEO_LINK_HERE)
