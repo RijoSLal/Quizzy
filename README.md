@@ -28,10 +28,10 @@ Watch the full walkthrough of how Quizzy functions and performs an AI-driven int
    - Document retrieval from ChromaDB with Gemini embeddings
    - Real-time TTS (Edge TTS) and STT (Whisper)
    - Vision-based posture and emotion detection using MediaPipe and MobileNet
+   - Profile summarization using HuggingFace model
 4. **Post Interview**:
    - Score computation and evaluation report
    - Suggestions for improvement
-   - Profile summarization using HuggingFace model
    - Curated job recommendations from LinkedIn scraping based on candidate profile
 
 ### ML and MLOps Stack
