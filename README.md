@@ -51,6 +51,16 @@ Watch the full walkthrough of how Quizzy functions and performs an AI-driven int
 
 ---
 
+### ⚠️ Minimum System Requirements
+
+- **CPU:** 12 threads (e.g., 4P + 4E cores, 2.0 GHz+)
+- **RAM:** 6 GB
+- **GPU:** Integrated, 48 EUs+, OpenGL 4.5+
+
+> ⚠️ Systems below these specs may face performance issues or instability.
+
+---
+
 ## Deployment
 
 To configure a **production-ready self-hosted environment using NGINX and Cloudflare Tunnel**, refer to my detailed blog post:  
