@@ -166,8 +166,7 @@ quizzy/
 ├── Dockerfile
 ├── .dockerignore
 ├── .env
-├── requirements.txt
-└── preview.png         # Optional preview image for README
+└── requirements.txt
 ```
 
 ---
