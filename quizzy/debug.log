@@ -1,0 +1,56 @@
+Unexpected error happened in summarization : Bypass summarization
+Validation missing in session redirecting to eligibility page
+Missing fields: ['filename', 'description']
+Missing fields: ['filename']
+Unexpected error happened in summarization : Bypass summarization
+Unexpected error happened in summarization : Bypass summarization
+Unexpected error happened in summarization : Bypass summarization
+Unexpected error happened in summarization : Bypass summarization
+Unexpected error happened in summarization : Bypass summarization
+Unexpected error happened in summarization : Bypass summarization
+Domain&Name extraction failed :Got invalid JSON object. Error: Expecting value: line 1 column 1 (char 0)
+For troubleshooting, visit: https://python.langchain.com/docs/troubleshooting/errors/OUTPUT_PARSING_FAILURE 
+Unexpected error happened in summarization : Bypass summarization
+Unexpected error happened in summarization : Bypass summarization
+Unexpected error happened in summarization : Bypass summarization
+Unexpected error happened in summarization : Bypass summarization
+Missing fields: ['filename', 'description']
+Missing fields: ['filename', 'description']
+Missing fields: ['filename', 'description']
+Invalid file type uploaded: application/octet-stream
+Invalid file type uploaded: image/jpeg
+Invalid file type uploaded: image/jpeg
+Missing fields: ['description']
+Missing fields: ['filename']
+Missing fields: ['description']
+Unexpected error happened in summarization : Bypass summarization
+Domain&Name extraction failed :Got invalid JSON object. Error: Expecting value: line 1 column 1 (char 0)
+For troubleshooting, visit: https://python.langchain.com/docs/troubleshooting/errors/OUTPUT_PARSING_FAILURE 
+Unexpected error happened in summarization : Bypass summarization
+Unexpected error happened in summarization : Bypass summarization
+Unexpected error happened in summarization : Bypass summarization
+Unexpected error happened in summarization : Bypass summarization
+Unexpected error happened in summarization : Bypass summarization
+Unexpected error happened in summarization : Bypass summarization
+Unexpected error happened in summarization : Bypass summarization
+Missing fields: ['filename', 'description']
+Missing fields: ['description']
+Missing fields: ['filename']
+Unexpected error happened in summarization : Bypass summarization
+ATS validation failed with score: 42.33
+Unexpected error happened in summarization : Bypass summarization
+Unexpected error happened in summarization : Bypass summarization
+Unexpected error happened in summarization : Bypass summarization
+llama3-70b-8192 Groq model question evaluation failed: Error code: 400 - {'error': {'message': "Failed to call a function. Please adjust your prompt. See 'failed_generation' for more details.", 'type': 'invalid_request_error', 'code': 'tool_use_failed', 'failed_generation': '<tool-use>{"tool_calls": [{"id": "pending", "type": "function", "function": {"name": "EvaluationResult"}, "parameters": {"score": 2, "better": "The \'Awards and Certificates\' section is relevant to my overall profile, not just the specific project.", "reason": "The answer is completely unrelated to the question and appears to be nonsensical.", "communication_feedback": "Please focus on providing a clear and concise answer that directly addresses the question."}}}]}</tool-use>'}}
+Unexpected error happened in summarization : Bypass summarization
+Validation missing in session redirecting to eligibility page
+Unexpected error happened in summarization : Bypass summarization
+Unexpected error happened in summarization : Bypass summarization
+Missing fields: ['filename']
+Invalid file type uploaded: image/jpeg
+Domain&Name extraction failed :model requires more system memory (1.5 GiB) than is available (736.6 MiB) (status code: 500)
+Domain&Name extraction failed :Got invalid JSON object. Error: Expecting value: line 1 column 1 (char 0)
+For troubleshooting, visit: https://python.langchain.com/docs/troubleshooting/errors/OUTPUT_PARSING_FAILURE 
+Unexpected error happened in summarization : Bypass summarization
+Invalid file type uploaded: application/octet-stream
+Unexpected error happened in summarization : Bypass summarization

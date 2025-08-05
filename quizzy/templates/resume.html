@@ -51,8 +51,14 @@
         width: 5rem;
         height: 5rem;
     }
+    .file-name-setting{
+        color: #3182CE;
+        visibility: hidden;
+        margin-top:-10px;
+        margin-bottom:5px;
+    }
 </style>
-<body class="d-flex align-items-center justify-content-center">
+<body class="d-flex align-items-center justify-content-center ">
 
     <div id="loader-overlay" style="display: none;">
         <div class="spinner-grow custom-spinner" role="status">
@@ -76,13 +82,13 @@
         <form method="POST" enctype="multipart/form-data" class="row w-100 h-100">
             {% csrf_token %}
   
-            <div class="col-12 col-md-6 d-flex  p-3 py-2 pl-3 canvas h-100 " >
-                <textarea id="textarea"  placeholder="Type your message here..." class="w-100 h-100 " name="description" ></textarea>
+            <div class="col-12 col-md-6 d-flex  p-3 py-2 pl-3 canvas h-100" >
+                <textarea id="textarea"  placeholder="Type your job description here..." class="w-100 h-100 " name="description" ></textarea>
             </div>
     
             <div class=" col-12 col-md-6 d-flex flex-column align-items-start justify-content-start p-3">
                <div class=" w-100 file-contain d-flex justify-content-center">
-                <div class=" file-upload d-flex justify-content-center ">
+                <!-- <div class=" file-upload d-flex justify-content-center ">
 
 
                     <div class="d-flex flex-column align-items-center justify-content-center text-center pt-4">
@@ -90,10 +96,23 @@
                         <label for="file" class="file-label">
                             <img src="{% static 'images/Upload icon.png' %}" alt="Upload" class="upload-image">
                         </label>
-                        <p class="fw-bold">Drag & Drop your resume here or <label for="file" id="browse" class="fw-bold">click to upload</label></p>
-                        <p class="mx-2 font-below">Supported formates: JPEG, PNG, GIF, MP4, PDF, PSD</p>
+                        <p class="fw-bold mx-2">Drag and drop your resume here, or <label for="file" id="browse" class="fw-bold">click to upload</label></p>
+                        <span id="file-name" class="mt-2 text-muted small" style="visibility: hidden;"></span>
+                        <p class="mx-3 font-below">Only PDF resumes are accepted, in line with standard industry formats</p>
                     </div>
                     
+                </div> -->
+                <div class="file-upload d-flex justify-content-center">
+                    <div class="d-flex flex-column align-items-center justify-content-center text-center pt-4">
+                        <input type="file" id="file" name="filename" class="file-input">
+                        <label for="file" class="file-label">
+                            <img src="{% static 'images/Upload icon.png' %}" alt="Upload" class="upload-image">
+                        </label>
+                        <p class="fw-bold mx-2">Drag and drop your resume here, or <label for="file" id="browse" class="fw-bold">click to upload</label></p>
+                        <span id="file-name" class="small file-name-setting"></span> 
+                        <p class="mx-3 font-below">Only PDF resumes are accepted, in line with standard industry formats</p>
+                     
+                    </div>
                 </div>
             </div>
               
@@ -148,7 +167,18 @@
             document.getElementById('loader-overlay').style.display = 'flex';
         });
     </script>
-   
+
+    <script>
+        document.getElementById('file').addEventListener('change', function () {
+          const fileName = this.files[0]?.name || 'No file selected';
+          const fileNameElement = document.getElementById('file-name');
+          fileNameElement.textContent = fileName;
+          
+          // Make the filename visible when a file is selected
+          fileNameElement.style.visibility = 'visible';
+        });
+      </script>
+      
     
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js"></script>
 </body>
