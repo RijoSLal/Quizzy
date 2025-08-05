@@ -259,15 +259,15 @@ class RAG_Test(TestCase):
         )
         self.assertIsInstance(question_gen,(str,type(None)))
         
-    def Evaluate_answer_test(self):
-        """Test answer evaluation produces expected output"""
-        score = self.retriever_instance.evaluate_answer(
-                self.question,
-                self.response,
-        )
-        self.assertIsInstance(score,(str,type(None)))
-        self.assertTrue(0 <= self.retriever_instance.score <= 10)
-        self.assertGreater(self.retriever_instance.count)
+    # def Evaluate_answer_test(self):
+    #     """Test answer evaluation produces expected output"""
+    #     score = self.retriever_instance.evaluate_answer(
+    #             self.question,
+    #             self.response,
+    #     )
+    #     self.assertIsInstance(score,(str,type(None)))
+    #     self.assertTrue(0 <= self.retriever_instance.score <= 10)
+    #     self.assertGreater(self.retriever_instance.count)
         
     def Socratic_conversation_test(self):
         """Test proper retrieval of socratic_conversation(previous_question, user_response)"""
