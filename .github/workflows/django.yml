@@ -28,4 +28,9 @@ jobs:
     - name: Run Tests
       run: | 
         cd quizzy
-        python manage.py test
+        python manage.py test 
+      env: 
+        APIKEY: ${{ secrets.APIKEY }}
+        GROQ: ${{ secrets.GROQ }}
+        GROQQ: ${{ secrets.GROQQ }}
+        GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
