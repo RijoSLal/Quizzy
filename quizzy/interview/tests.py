@@ -1,20 +1,20 @@
 from django.test import TestCase,Client
 from django.urls import reverse
-from . import resume_management,vectordb,speech,scrape,retriever,camera_capture
+from . import resume_management,vectordb,speech,scrape,retriever # ,camera_capture
 from django.core.files.uploadedfile import SimpleUploadedFile
 import io
 import asyncio
 from reportlab.pdfgen import canvas
-import cv2
+
 # Create your tests here.
-client=Client()
+client = Client()
 
 class VectorDB(TestCase):
     """
     TestCase for file vectordb.py which deals with chromadb operations
     """
     def setUp(self):
-        self.chroma=vectordb.ChromaDB()
+        self.chroma=vectordb.ChromaDB(session_id="test_session")
         self.extracted_text="This is a test document. It contains multiple sentences.\nNew paragraph starts here"
 
     
@@ -45,13 +45,14 @@ class VectorDB(TestCase):
         all_documents = self.chroma.get_all_documents()
         num_documents = len(all_documents)
 
-        retrieved_docs = set()
+        retrieved_contents = set()
         for _ in range(num_documents):
-            doc_content = self.chroma.get_random_document()
-            self.assertIsNotNone(doc_content)
-            retrieved_docs.add(doc_content)
+            res = self.chroma.get_random_document()
+            self.assertIsNotNone(res)
+            self.assertIn("content", res)
+            retrieved_contents.add(res["content"])
 
-        self.assertEqual(len(retrieved_docs), num_documents)
+        self.assertEqual(len(retrieved_contents), num_documents)
         self.assertIsNone(self.chroma.get_random_document())
     
 
@@ -77,10 +78,13 @@ class ResumeManagement(TestCase):
     def test_domain_name_extraction(self):
         "Test domain and name extraction with ollama model works"
         candidate_doc=" ".join([self.resume_details,self.job_description])
-        extracted_domain_name=self.resume.domain_name_extraction(candidate_doc)
+        extracted_domain_name=asyncio.run(self.resume.domain_name_extraction(candidate_doc))
         self.assertIsInstance(extracted_domain_name,dict)
         self.assertIn("candidate",extracted_domain_name)
         self.assertIn("job",extracted_domain_name)
+        self.assertIn("skills",extracted_domain_name)
+        self.assertIn("experience",extracted_domain_name)
+        self.assertIn("summary",extracted_domain_name)
 
     def test_ats_score(self):
         """
@@ -106,7 +110,7 @@ class ResumeManagement(TestCase):
 
     def test_final_method(self):
         fake_pdf = self.create_fake_pdf()
-        result = self.resume.final(fake_pdf, self.job_description)
+        result = asyncio.run(self.resume.final(fake_pdf, self.job_description))
         self.assertIsInstance(result, tuple)
         self.assertEqual(len(result), 4) 
         score, resume_text, description, extracted_details = result
@@ -126,7 +130,8 @@ class TTS(TestCase):
         Sample text test
         """
         tts_text="Hello world"
-        tts_output=asyncio.run(speech.text_to_speech(tts_text))
+        generator = speech.SpeechGenerator()
+        tts_output=asyncio.run(generator.text_to_speech(tts_text))
         self.assertIsInstance(tts_output,bytes)
 
 class Scraper(TestCase):
@@ -243,59 +248,35 @@ class RAG_Test(TestCase):
     """Tests for the RAG (Retrieval-Augmented Generation) component"""
 
     def setUp(self):
-        self.retriever_instance=retriever.RAG()
+        self.retriever_instance=retriever.RAG(session_id="test_session")
         self.question = "What is overfitting in ML?"
         self.response = "Overfitting is when a model memorizes training data, leading to poor generalization."
         
-    def Generate_interview_question_test(self):
-        """Test question generation produces expected output"""
+    def test_prepare_questions(self):
+        """Test question preparation produces expected output"""
+        resume = "Python developer with 5 years experience."
+        jd = "Looking for a senior Python engineer."
+        questions = asyncio.run(self.retriever_instance.prepare_questions(resume, jd))
+        self.assertIsInstance(questions, list)
+        if questions:
+            self.assertIn("question", questions[0])
 
-        document = "Regularization techniques like L1 and L2 help prevent overfitting by penalizing large weights in machine learning models."
-        
-        question_gen = self.retriever_instance.generate_interview_questions(
-                        document, 
-                        self.question,
-                        self.response,
-        )
-        self.assertIsInstance(question_gen,(str,type(None)))
-        
-    def Evaluate_answer_test(self):
+    def test_evaluate_answer(self):
         """Test answer evaluation produces expected output"""
-        score = self.retriever_instance.evaluate_answer(
+        res = asyncio.run(self.retriever_instance.evaluate_answer(
                 self.question,
                 self.response,
-        )
-        self.assertIsInstance(score,(str,type(None)))
-        self.assertTrue(0 <= self.retriever_instance.score <= 10)
-        self.assertGreater(self.retriever_instance.count)
+        ))
+        self.assertIsInstance(res, dict)
+        self.assertIn("score", res)
+        self.assertTrue(0 <= res["score"] <= 10)
         
-    def Socratic_conversation_test(self):
-        """Test proper retrieval of socratic_conversation(previous_question, user_response)"""
-        previous_question=self.question
-        user_response=self.response
-        follow_up_question = self.retriever_instance.socratic_conversation(previous_question, user_response)
-        self.assertIsInstance(follow_up_question, (str, type(None)))
-
-    def Summary_test(self):
-        """Test summarization produces expected output"""
-        self.retriever_instance.resume="""
-                                        Money plays a crucial role in shaping economies, societies, and individual lives.
-                                        It is a universally accepted medium of exchange that facilitates trade and commerce, 
-                                        allowing people to acquire goods and services without relying on the inefficiencies of bartering. 
-                                        Throughout history, different forms of money have evolved, from metal coins and paper currency to digital transactions and cryptocurrencies. 
-                                        Beyond its practical function, money also serves as a store of value,
-                                        enabling individuals to save and plan for the future.
-                                        Financial stability often brings security, freedom, and opportunities,
-                                        allowing people to invest in education, healthcare, businesses, and personal aspirations.
-                                        However, money is not just a tool for survival—it also influences human behavior, social structures, and even personal relationships.     
-                                        The way people earn, spend, and manage money can reflect their values, priorities, and financial literacy. 
-                                        While wealth can provide comfort and access to better opportunities, an excessive obsession with accumulating money can lead to stress, greed, and imbalance.
-                                        Ultimately, money is a powerful yet neutral force—it can be used to create a better life, support loved ones,
-                                        and contribute to society, or it can become a source of anxiety and division. Learning to manage money wisely,
-                                        understanding its limitations, and maintaining a healthy perspective on wealth are essential for achieving financial well-being and a fulfilling life.
-                                        """
-        summary=self.retriever_instance.candidate_document_summarization()
-        self.assertIsInstance(summary,str)
+    def test_socratic_conversation(self):
+        """Test proper retrieval of socratic_conversation using suggestions"""
+        history = [{"role": "assistant", "content": self.question}, {"role": "user", "content": self.response}]
+        suggestions = [{"question": "What is the difference between L1 and L2?", "category": "Technical"}]
+        follow_up = asyncio.run(self.retriever_instance.socratic_conversation(history, suggestions))
+        self.assertIsInstance(follow_up, (str, type(None)))
 
 class HomeTest(TestCase):
     """Tests for the home page view"""
@@ -353,14 +334,14 @@ class InterviewTest(TestCase):
     def setUp(self):
         self.client=Client()
         self.url = reverse("interview")
-        self.cam_url=reverse("live")
+        # self.cam_url=reverse("live")
         self.check_url= reverse("time")
         self.prediction_url=reverse("prediction")
         self.audio_file = SimpleUploadedFile("test.wav", b"dummy audio content", content_type="audio/wav")
         self.valid_session_data = {
             "validation": True,
             "user": {"candidate": "John Doe"},
-            "history": [{"speaker": "ai", "chat": "Hi John Doe, shall we begin?"}],
+            "history": [{"role": "assistant", "content": "Hi John Doe, are you ready for the interview?"}],
             "ATS": 85,
             "summary":"N/A"
         }
@@ -373,8 +354,45 @@ class InterviewTest(TestCase):
         response = self.client.get(self.url)
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, "interview.html")
-        self.assertIsInstance(response.context["conversation"][0]["chat"], str)
+        self.assertIsInstance(response.context["conversation"][0]["content"], str)
         self.assertEqual(response.context["ats"], 85)
+
+    def test_history_limit_and_system_prompt(self):
+        """Test that history is limited to 10 and contains the system prompt."""
+        session = self.client.session
+        # Simulate a long history (12 messages)
+        session["history"] = [
+            {"role": "system", "content": "System prompt"},
+            {"role": "assistant", "content": "1"},
+            {"role": "user", "content": "2"},
+            {"role": "assistant", "content": "3"},
+            {"role": "user", "content": "4"},
+            {"role": "assistant", "content": "5"},
+            {"role": "user", "content": "6"},
+            {"role": "assistant", "content": "7"},
+            {"role": "user", "content": "8"},
+            {"role": "assistant", "content": "9"},
+            {"role": "user", "content": "10"},
+            {"role": "assistant", "content": "11"},
+        ]
+        session.save()
+        
+        # Trigger any view that uses the session and potentially trims history
+        response = self.client.get(self.url)
+        self.assertEqual(len(response.context["conversation"]), 11) # get doesn't trim, only filters system
+        
+        session.clear()
+        session["user"] = {"candidate": "John Doe"}
+        session["ATS"] = 85
+        session["summary"] = "N/A"
+        session["validation"] = True
+        session.save()
+        
+        response = self.client.get(self.url)
+        history = self.client.session["history"]
+        self.assertEqual(history[0]["role"], "system")
+        self.assertEqual(len(history), 2) # system + assistant greeting
+        self.assertEqual(len(response.context["conversation"]), 1) # only assistant greeting
 
     def test_post_request(self):
         pass
@@ -385,13 +403,13 @@ class InterviewTest(TestCase):
         # self.assertIn("conversation", response.json())
         # self.assertIn("audio", response.json())  
 
-    def test_camera_stream(self):
-        """Test if the camera endpoint returns data and in valid format"""
-        response = self.client.get(self.cam_url)
+    # def test_camera_stream(self):
+    #     """Test if the camera endpoint returns data and in valid format"""
+    #     response = self.client.get(self.cam_url)
 
-        # Expect streaming response (status 200)
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response["Content-Type"], "multipart/x-mixed-replace;boundary=frame")
+    #     # Expect streaming response (status 200)
+    #     self.assertEqual(response.status_code, 200)
+    #     self.assertEqual(response["Content-Type"], "multipart/x-mixed-replace;boundary=frame")
 
     def test_prediction_view(self):
         """
@@ -431,7 +449,7 @@ class ScoreTest(TestCase):
         session.save()
 
         
-    def get_test(self):
+    def test_get(self):
         """
         Test if the score page returns 200 status and in valid format and renders correct html file
         """
@@ -448,11 +466,11 @@ class ScoreTest(TestCase):
         self.assertEqual(context["ats"], 85)
 
 
-    def post_test(self):
+    def test_post(self):
         """
         Test PDF downloading works by checking status code and return type
         """
-        response = self.client.get(reverse("score"))
+        response = self.client.post(reverse("score"))
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response["Content-Type"], "application/pdf")
         self.assertIn("Content-Disposition", response)

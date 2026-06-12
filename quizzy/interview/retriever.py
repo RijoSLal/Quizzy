@@ -1,34 +1,28 @@
 # import google.generativeai as genai
 import os 
-from . import vectordb
+from . import vectordb, llm
 from dotenv import load_dotenv
 import random
-from groq import Groq
-from langchain.chat_models import init_chat_model
 from pydantic import BaseModel, Field
 import logging
-from transformers import TFAutoModelForSeq2SeqLM, AutoTokenizer
+import orjson
+from django.conf import settings
+import time
 
-
-logger = logging.getLogger("interview")
-
+# Load environment variables
 load_dotenv()
 
-client = Groq(
-    api_key=os.getenv("GROQ"),
-)
+# Configure logging
+logger = logging.getLogger("interview")
 
-llm=init_chat_model("llama3-70b-8192", model_provider="groq",groq_api_key=os.getenv("GROQQ"))
+class SocraticQuestion(BaseModel):
+    """A structured representation of a technical question."""
+    question: str = Field(..., description="The technical question text.")
+    category: str = Field(..., description="The Socratic category of the question.")
 
-
-
-class EvaluationResult(BaseModel):
-    """structured response for RAG evaluation."""
-    score: int = Field(..., ge=1, le=10, description="Score from 1 to 10.")
-    reason: str = Field(..., description="Brief reason for the score.")
-    better: str = Field(..., description="Improved version of the user's answer.")
-    communication_feedback: str = Field(..., description="A short tip to improve clarity, conciseness, or tone.")
-
+class StructuredQuestions(BaseModel):
+    """List of pre-generated interview questions."""
+    questions: list[SocraticQuestion] = Field(..., description="A list of exactly 15 UNIQUE and challenging interview questions. No duplicates.")
 
 
 class RAG:
@@ -37,36 +31,51 @@ class RAG:
 
     This class enables:
     - Storing and retrieving documents using ChromaDB.
-    - Generating interview-style questions based on given documents.
+    - Preparing a structured list of interview questions.
     - Evaluating user responses with an AI model.
-    - Conducting Socratic-style conversations to assess critical thinking.
+    - Conducting Socratic-style conversations using pre-generated questions.
 
     Attributes:
-        question_types (dict): A mapping of question categories to their corresponding prompts.
         chromadb_instance (ChromaDB): An instance of ChromaDB for document retrieval.
         level (str | None): The difficulty level of questions.
         score (int): The cumulative score of evaluated answers.
         count (int): The number of evaluated answers.
-        structured_llm (LLM): A structured LLM for evaluating responses.
     """
-    def __init__(self):
-        """Initializes the RAG system with predefined question types, a vector database instance, and an LLM for structured evaluation."""
-        self.question_types= {
-            "Clarification": "Can you elaborate on that?",
-            "Assumption Testing": "What assumptions are you making here?",
-            "Reason and Evidence": "What evidence supports your response?",
-            "Viewpoint Exploration": "What are some alternative perspectives?",
-            "Implication and Consequence": "What are the possible consequences of this?",
-            "Questioning the Question": "Why do you think this question is important?"
-                            }
-        self.chromadb_instance=vectordb.ChromaDB()
-        self.level=None
+    def __init__(self, session_id: str, level: str = None):
+        """Initializes the RAG system with a vector database instance specific to the user session."""
+        self.chromadb_instance = vectordb.ChromaDB(session_id)
+        self.level=level
         self.score=0
         self.count=0
-        self.structured_llm = llm.with_structured_output(EvaluationResult)
         self.resume=None
-        self.model_name = "sshleifer/distilbart-cnn-12-6"
+        self._load_fallback_questions()
         
+    def _load_fallback_questions(self):
+        """Loads fallback questions and goodbyes from an external JSON file using orjson."""
+        try:
+            # Construct path relative to the project root (assuming assets is in the root)
+            assets_path = os.path.join(settings.BASE_DIR, 'assets', 'fallback_questions.json')
+            with open(assets_path, 'rb') as f:
+                raw_data = orjson.loads(f.read())
+                
+                # Handle both old and new JSON formats for robustness
+                if isinstance(raw_data, list):
+                    # Old format: direct list of questions
+                    self.fallback_questions = [{"question": q["question"], "category": q["category"], "is_fallback": True} for q in raw_data]
+                    self.fallback_goodbyes = ["Your interview is complete, let's see the result."]
+                else:
+                    # New format: dict with "questions" and "goodbyes" keys
+                    self.fallback_questions = [{"question": q["question"], "category": q["category"], "is_fallback": True} for q in raw_data.get("questions", [])]
+                    self.fallback_goodbyes = raw_data.get("goodbyes", ["Your interview is complete, let's see the result."])
+                
+            logger.info(f"Successfully loaded {len(self.fallback_questions)} fallback questions and {len(self.fallback_goodbyes)} goodbyes.")
+        except Exception as e:
+            logger.error(f"Failed to load fallback questions: {e}")
+            self.fallback_questions = [
+                {"question": "Explain the architectural trade-offs in your most recent project.", "category": "Architecture", "is_fallback": True}
+            ]
+            self.fallback_goodbyes = ["Your interview is complete, let's see the result."]
+
     def score_reset(self):
         """
         Reset score and count for the next iter
@@ -90,162 +99,203 @@ class RAG:
         logger.info("resetting score")
         self.resume = resume
         self.chromadb_instance.delete_inserted_docs()
-        self.chromadb_instance.insert_into_chroma(resume)
-        self.chromadb_instance.insert_into_chroma(job_description)
-        # logger.info("All the documents are successfully inserted in ChromaDB")
+        self.chromadb_instance.insert_into_chroma(resume, metadata={"source": "resume"})
+        self.chromadb_instance.insert_into_chroma(job_description, metadata={"source": "job_description"})
 
-
-    def get_random_document(self) -> str | None:
+    async def prepare_questions(self, resume: str, job_description: str) -> list[dict]:
         """
-        Fetches a random document from the database.
-
-        Returns:
-            str | None: A randomly selected document, or None if retrieval fails.
+        Generates 15 meaningful technical interview questions.
+        Includes a 30-second timeout and uses pre-loaded fallback questions.
         """
+        import time
+        import asyncio
+        start_time = time.perf_counter()
+
         try:
-            extracted_random_docs=self.chromadb_instance.get_random_document()
-            logger.info("Random document extraction successful")
-            return extracted_random_docs
-        except Exception as e:
-            logger.error(f"Quizzy encountered an error while fetching random document: {e}")
-            return None
+            logger.info("Starting to prepare questions pool with 30s timeout...")
+            system_prompt = (
+                "You are a Senior Technical Interviewer. "
+                "Generate a list of EXACTLY 15 UNIQUE, focused technical questions. "
+                "Each question should focus on ONE specific concept from the candidate's domain or the job requirements. "
+                "Avoid 'barrage' questions that ask about 5 different things at once. "
+                "The questions should be deep but concise, testing practical implementation and architectural trade-offs. "
+                f"Target difficulty: {self.level} level. "
+                "Every question must be distinctly different from the others."
+            )
+            user_content = f"Resume: {resume}\nJob Description: {job_description}"
 
-    def generate_interview_questions(self, document: str|None, question: str, response: str, question_type: str = "critical thinking") -> str | None:
-        """
-        Generates an AI-driven interview question based on the given document and user's previous response.
-
-        Args:
-            document (str): The reference document for generating questions.
-            question (str): The previous question asked to the user.
-            response (str): The user's response to the previous question.
-            question_type (str, optional): The type of question to generate. Defaults to "critical thinking".
-
-        Returns:
-            str: The generated interview question, or an error message if generation fails.
-        """
-        try:
-            if document:             
-                prompt = f"""
-                            You are Quizzy, an AI interviewer. First, respond to the candidate's previous answer in short line.  
-                            Then, generate a challenging {self.level}-level question based on the provided document.  
-                            
-                            Previous Question:  
-                            "{question}"  
-
-                            Response to Previous Answer:  
-                            "{response}"  
-
-                            Document: "{document}"  
-                            Question Type: "{question_type}"  
-
-                            Ensure the question is thought-provoking and tests analytical skills. Return only the response and the new question, without explanations.
-                            """
-            else:
-                logger.info(f"All document extracted no more document available")
-                return None
+            # Wrap in timeout
+            response = await asyncio.wait_for(
+                llm.client.beta.chat.completions.parse(
+                    model=llm.MODEL,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_content}
+                    ],
+                    response_format=StructuredQuestions,
+                    temperature=llm.TEMPERATURE
+                ),
+                timeout=30.0
+            )
+            structured_out = response.choices[0].message.parsed
             
-            chat_completion = client.chat.completions.create(
-                                    messages=[
-                                        {
-                                            "role": "user",
-                                            "content": prompt,
-                                        }
-                                    ],
-                                    model="llama3-70b-8192",
-                                )
-            return chat_completion.choices[0].message.content
-           
+            # Length validation
+            if len(structured_out.questions) < 12:
+                logger.warning(f"SWITCHING TO MANUAL FALLBACK: LLM generated only {len(structured_out.questions)} questions (needed at least 12).")
+                return self.fallback_questions
+
+            duration = time.perf_counter() - start_time
+            logger.info(f"Structured questions pool ({len(structured_out.questions)}) prepared successfully in {duration:.2f}s")
+            return [{"question": q.question, "category": q.category, "is_fallback": False} for q in structured_out.questions]
+
+        except asyncio.TimeoutError:
+            logger.warning(f"SWITCHING TO MANUAL FALLBACK: LLM question generation timed out after {time.perf_counter() - start_time:.2f}s.")
+            return self.fallback_questions
         except Exception as e:
-            logger.error(f"Groq llama3-70b-8192 question generating API encountered an error : {e}")
-            return None
+            logger.error(f"SWITCHING TO MANUAL FALLBACK: Error preparing questions after {time.perf_counter() - start_time:.2f}s. Exception: {e}")
+            return self.fallback_questions
 
-    def evaluate_answer(self,question: str, user_answer:str) -> str | None:
+    def get_system_prompt(self, is_final: bool, domain: str = None, level: str = None) -> str:
+        """Returns the system prompt for the AI interviewer."""
+        if is_final:
+            return (
+                "The interview is now over. "
+                "You MUST say EXACTLY: 'Your interview is complete, we will give you the result shortly.' and nothing else."
+            )
+        
+        # Map internal level names to seniority labels
+        level_map = {
+            "beginner": "SD1",
+            "intermediate": "SD2",
+            "advance": "SD3",
+            "expert": "SD4/Expert"
+        }
+        seniority = level_map.get(level, level)
+        
+        persona = f"an AI {domain} technical interviewer" if domain else "a human-like AI technical interviewer"
+        level_info = f" ({seniority} level)" if seniority else ""
+        target = f"a candidate for a {domain} role{level_info}" if domain else f"a candidate{level_info}"
+
+        return (
+            f"You are Quizzy, {persona}. "
+            f"You are currently interviewing {target}. "
+            "Ask concise questions. "
+            "Do NOT repeat the candidate's name or a 'Hi [Name]' greeting at the start of every message. "
+            "Simply acknowledge the candidate's answer naturally (e.g., 'Okay', 'That makes sense', 'I see') and THEN ask the next technical question. "
+            "If the candidate's response is completely unrelated to the interview (e.g., talking about the weather or personal life), politely steer them back. "
+            "Otherwise, if they answer 'I don't know' or give a short answer, acknowledge it professionally and THEN ask the next technical question. "
+            "CRITICAL: You MUST output the actual text of the next question. Do not just say 'Let's move to the next question'. You must actually ask it."
+            "Do NOT end the interview."
+        )
+
+    async def socratic_conversation(self, chat_history: list[dict], suggested_questions: list[dict], candidate_name: str = None, domain: str = None, level: str = None) -> str | None:
         """
-        Evaluates a user's answer based on relevance, clarity, and depth.
-
-        Args:
-            question (str): The interview question that was asked.
-            user_answer (str): The user's response to the question.
-
-        Returns:
-            str: A structured evaluation containing:
-                - A score (1-10)
-                - A reason for the score
-                - An improved answer suggestion
-                - A short tip for improvement
+        Engages in a Socratic-style conversation using the full history and real-time RAG context.
         """
-
         try:
-            prompt = f"""
-            You are an AI evaluator. Given a question and a user's answer, score the response from 1 to 10 based on relevance, clarity, and depth.
+            # Prepare message list from history (avoiding shallow copy issues)
+            messages = [dict(msg) for msg in chat_history]
 
-            Question: "{question}"
-            User Answer: "{user_answer}"
+            # Determine if this is the final turn
+            is_final = not suggested_questions
+            
+            # IF FINAL TURN, DO NOT CALL LLM. Return a random predefined goodbye.
+            if is_final:
+                return random.choice(self.fallback_goodbyes)
 
-            Return:
-            - Score (1-10)
-            - A brief reason for the score (one simple sentence)
-            - A better answer in one sentence (not too long)
-            - A short tip to improve clarity, conciseness, or tone
-            """
-            structured_out = self.structured_llm.invoke(prompt)
-            self.score+=structured_out.score
-            self.count+=1
+            # Determine the query for VDB based on the next question or topic
+            query_str = "technical interview"
+            if suggested_questions:
+                query_str = suggested_questions[0].get("question", query_str)
 
-            formatted_output = str(structured_out)
-            logger.info("successfully evaluated User_answer and Question")
-            return formatted_output
-
-           
+            # Retrieve relevant context from Chroma based on the question/topic
+            search_results = self.chromadb_instance.query_vdb(query_str, k=1)
+            
+            if search_results:
+                raw_context = search_results[0]
+                source = raw_context.get("metadata", {}).get("source", "unknown")
+                prefix = "[RESUME INFO]" if source == "resume" else "[JOB DESCRIPTION]" if source == "job_description" else "[CONTEXT]"
+                reference_context = f"{prefix} {raw_context['content']}"
+            else:
+                reference_context = "N/A"
+            
+            system_prompt = self.get_system_prompt(is_final, domain=domain, level=level)
+            
+            # Ensure the latest system prompt is at the start
+            if messages and messages[0]["role"] == "system":
+                messages[0]["content"] = system_prompt
+            else:
+                messages.insert(0, {"role": "system", "content": system_prompt})
+            
+            # Format instructions based on context
+            if suggested_questions:
+                current_q = suggested_questions[0]
+                if current_q.get("is_fallback"):
+                    pool_instruction = (
+                        f"Topic: '{current_q['question']}' (Category: {current_q['category']}).\n"
+                        "INSTRUCTION: You must ask the candidate ONE technical question about this specific topic. "
+                        "Use the 'Reference Context' to make the question relevant. Do not output anything else."
+                    )
+                else:
+                    pool_instruction = (
+                        f"Target Question to ask: '{current_q['question']}'\n"
+                        "INSTRUCTION: You MUST output this exact question now. You may add a brief 1-sentence acknowledgment of their previous answer before asking it, but YOU MUST ASK THE QUESTION."
+                    )
+            
+            # Combine the final instruction with the last user message to maintain Assistant -> User turn consistency
+            instruction_block = f"Reference Context: {reference_context}\n\nINSTRUCTION: {pool_instruction}"
+            
+            if messages and messages[-1]["role"] == "user":
+                messages[-1]["content"] += f"\n\n{instruction_block}"
+            else:
+                messages.append({"role": "user", "content": instruction_block})
+            
+            logger.debug(f"Socratic Turn - Final: {is_final}")
+            
+            response = await llm.client.beta.chat.completions.create(
+                model=llm.MODEL,
+                messages=messages,
+                temperature=llm.TEMPERATURE
+            )
+            return response.choices[0].message.content
         except Exception as e:
-            logger.error(f"llama3-70b-8192 Groq model question evaluation failed: {e}")
+            logger.error(f"Error in socratic conversation: {e}")
             return None
-        
-        
-    
-    def socratic_conversation(self,previous_quest: str,user_resp: str) -> str | None:
+
+    async def evaluate_answer(self, question: str, user_answer: str) -> dict | None:
         """
-        Engages in a Socratic-style conversation by generating a follow-up question based on a randomly retrieved document.
-
-        Args:
-            previous_quest (str): The previous question in the conversation.
-            user_resp (str): The user's response to the previous question.
-
-        Returns:
-            str: A follow-up question, or None if document retrieval fails.
+        Evaluates a candidate's answer based on the question and context.
         """
-        document = self.get_random_document()
-        
-        if not document: #just for safety even though this is implemented in self.get_random_document()
-            return None
-        question_type = random.choice(list(self.question_types.keys()))
-        questions = self.generate_interview_questions(document, previous_quest, user_resp, question_type)
-        logger.info("RAG question generation cycle completed")
-        return questions
-    
-
-    def candidate_document_summarization(self) -> str:
-        """
-        Generates a summary of the extracted resume using a pre-trained NLP model.
-
-        Returns:
-            str: The generated summary of the resume.
-            "Minor issue identified in the summarization process. Adjustments are in progress for optimal results": If the summary generation fails.
-        """
-
         try:
-            raise Exception("Bypass summarization")
-            # tokenizer = AutoTokenizer.from_pretrained(self.model_name)
-            # model = TFAutoModelForSeq2SeqLM.from_pretrained(self.model_name,from_pt=True)
+            system_prompt = (
+                "You are an expert interviewer. Evaluate the candidate's answer based on the provided question. "
+                "Return a JSON object with: 'score' (1-10), 'reason' (brief explanation), 'better' (a superior version of the answer), "
+                "and 'communication_feedback' (feedback on how they expressed themselves)."
+            )
+            user_content = f"Question: {question}\nCandidate Answer: {user_answer}"
+            
+            class Evaluation(BaseModel):
+                score: int
+                reason: str
+                better: str
+                communication_feedback: str
 
-            # inputs = tokenizer(self.resume, return_tensors="tf", truncation=True)  # no max_length here
-            # summary_ids = model.generate(**inputs, max_length=150, num_beams=4, early_stopping=True)  # summary length
-            # summary = tokenizer.decode(summary_ids[0], skip_special_tokens=True)
-            # logger.info(f"Summarization of candidate profile completed")
-            # return summary
+            response = await llm.client.beta.chat.completions.parse(
+                model=llm.MODEL,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_content}
+                ],
+                response_format=Evaluation,
+                temperature=llm.TEMPERATURE
+            )
+            structured_out = response.choices[0].message.parsed
+            return {
+                "score": structured_out.score,
+                "reason": structured_out.reason,
+                "better": structured_out.better,
+                "communication_feedback": structured_out.communication_feedback
+            }
         except Exception as e:
-            logger.error(f"Unexpected error happened in summarization : {e}")
-            return "Minor issue identified in the summarization process. Adjustments are in progress for optimal results"
-
-
-
+            logger.error(f"Evaluation failed: {e}")
+            return None

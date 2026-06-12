@@ -1,0 +1,25 @@
+{
+    "questions": [
+        {"question": "Core Domain Competency", "category": "In-depth Knowledge"},
+        {"question": "System Architecture & Design", "category": "Higher-level Understanding"},
+        {"question": "Performance Optimization & Scaling", "category": "Optimization"},
+        {"question": "Complex Problem Solving Methodology", "category": "Analytical Thinking"},
+        {"question": "Security & Best Practices", "category": "Security"},
+        {"question": "Data Structures & Algorithms in Practice", "category": "Implementation"},
+        {"question": "Distributed Systems & Concurrency", "category": "Architecture"},
+        {"question": "Testing, QA & Reliability", "category": "Quality Assurance"},
+        {"question": "Database Design & Data Integrity", "category": "Data Management"},
+        {"question": "API Design & Microservices", "category": "API Architecture"},
+        {"question": "Handling Technical Debt & Legacy Code", "category": "Engineering Practices"},
+        {"question": "Monitoring, Logging & Observability", "category": "Operations"},
+        {"question": "Tooling & Ecosystem Integration", "category": "Integration"},
+        {"question": "Trade-offs in Technical Decision Making", "category": "Technical Strategy"},
+        {"question": "Edge Cases & Failure Scenarios", "category": "Resilience"}
+    ],
+    "goodbyes": [
+        "Your interview is complete, let's see the result.",
+        "The session has concluded. We are ready to show you the results.",
+        "That's all for today. Your interview is finished, let's check your performance.",
+        "Thank you for your time. Your interview is complete, lets see the result."
+    ]
+}

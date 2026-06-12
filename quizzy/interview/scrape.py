@@ -22,10 +22,10 @@ class Scrape:
             job (str): The job title to search for.
             pos (list[int]): A list of experience level codes.
         """
-        self.job=job
-        self.pos=pos
+        self.job = job
+        self.pos = pos
         self.url = f"https://www.linkedin.com/jobs/search?keywords={self.job}&f_E={','.join(map(str,self.pos))}"
-        self.space=[]
+        self.space = []
         
     def list_items(self) -> list:
         """
@@ -42,7 +42,7 @@ class Scrape:
         if response.status_code != 200:
             logger.error(f"Failed to fetch jobs. Status Code: {response.status_code}")
             return basics
-        soup=BeautifulSoup(response.text,"html5lib")
+        soup = BeautifulSoup(response.text,"html.parser")
         clean_content=soup.find_all("li")
         for each in clean_content:
             basics.append(each.find("div",{"class":"base-card"}))

@@ -12,5 +12,6 @@ import os
 from django.core.asgi import get_asgi_application
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "quizzy.settings")
+os.environ["ANONYMIZED_TELEMETRY"] = "False"
 
 application = get_asgi_application()

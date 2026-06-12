@@ -13,9 +13,19 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:ital,wght@0,400..700;1,400..700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{% static 'styling/interview.css' %}">
-   
-    
-</head>
+    <style>
+        .loading-dots:after {
+            content: '.';
+            animation: dots 1.5s steps(5, end) infinite;
+        }
+        @keyframes dots {
+            0%, 20% { color: rgba(0,0,0,0); text-shadow: .25em 0 0 rgba(0,0,0,0), .5em 0 0 rgba(0,0,0,0); }
+            40% { color: inherit; text-shadow: .25em 0 0 rgba(0,0,0,0), .5em 0 0 rgba(0,0,0,0); }
+            60% { text-shadow: .25em 0 0 inherit, .5em 0 0 rgba(0,0,0,0); }
+            80%, 100% { text-shadow: .25em 0 0 inherit, .5em 0 0 inherit; }
+        }
+    </style>
+    </head>
 <body class="d-flex justify-content-center align-items-center">
     <div class="container-fluid">
         <div class="row g-3 h-100"> 
@@ -56,7 +66,7 @@
                 </div>
                 <div class=" d-flex justify-content-center mt-5 circle-container" >
                     <div class="rounded-circle main-circle">
-                        <!-- <img src="{% url 'live' %}" style="object-fit: cover; transform: scaleX(-1);"> --> <!--this is for using backend webcam streaming-->
+                        {# <img src="{% url 'live' %}" style="object-fit: cover; transform: scaleX(-1);"> #} <!--this is for using backend webcam streaming-->
                         <video id="video" autoplay playsinline style="object-fit: cover; transform: scaleX(-1);"></video>
                         <canvas id="canvas" style="display:none;"></canvas>
                     </div>
@@ -78,8 +88,8 @@
                         <div class="chat-container mb-3">
                             <div class="chat-box" id="chat-box">
                                 {% for message in conversation %}
-                                    <div class="chat-message {% if message.speaker == 'human' %}sent{% else %}received{% endif %} d-flex justify-content-center align-items-center">
-                                        <p>{{ message.chat }}</p>
+                                    <div class="chat-message {% if message.role == 'user' %}sent{% else %}received{% endif %}">
+                                        <p>{{ message.content }}</p>
                                     </div>
                                 {% endfor %}
                             </div>
@@ -239,6 +249,8 @@
             }
         });
     
+        let isRedirecting = false;
+
         document.getElementById("task-form").addEventListener("submit", async function(event) {
             event.preventDefault();  // prevent page reload
     
@@ -247,42 +259,125 @@
                 return;
             }
     
-            let formData = new FormData(this);
             const csrfToken = document.querySelector("[name=csrfmiddlewaretoken]").value;
             const audioBlob = new Blob(audioChunks, { type: "audio/wav" });
-            formData.append("audio", audioBlob, "recording.wav");
             
             const selectedOption = document.querySelector('input[name="option"]:checked');
-                if (selectedOption) {
-                    formData.append("option", selectedOption.value);
-                }
 
             let chatBox = document.getElementById("chat-box");
-    
-            fetch("{% url 'interview' %}", {
+            
+            // Disable send button while processing
+            document.getElementById("sendButton").disabled = true;
+
+            // 1. Send Audio for Transcription
+            let transcribeFormData = new FormData();
+            transcribeFormData.append("audio", audioBlob, "recording.wav");
+
+            // Show a temporary "Transcribing..." indicator
+            let transcribingDiv = document.createElement("div");
+            transcribingDiv.id = "transcribing-indicator";
+            transcribingDiv.classList.add("chat-message", "sent");
+            transcribingDiv.innerHTML = `<p>Transcribing<span class="loading-dots"></span></p>`;
+            chatBox.appendChild(transcribingDiv);
+            scrollToBottom();
+            
+            fetch("{% url 'transcribe' %}", {
                 method: "POST",
-                headers: { "X-CSRFToken": csrfToken, "X-Requested-With": "XMLHttpRequest" , },
-                body: formData
+                headers: { "X-CSRFToken": csrfToken, "X-Requested-With": "XMLHttpRequest" },
+                body: transcribeFormData
             })
             .then(response => response.json())
-            .then(data => {
-                chatBox.innerHTML = "";  // clear chat
-                data.conversation.forEach(msg => {
-                    let div = document.createElement("div");
-                    div.classList.add("chat-message", msg.speaker === "human" ? "sent" : "received");
-                    div.innerHTML = `<p>${msg.chat}</p>`;
-                    chatBox.appendChild(div);
-                });
-                if (data.audio) {
-                    const audio = new Audio(`data:audio/mp3;base64,${data.audio}`);
-                    audio.play();
+            .then(transcribeData => {
+                // Remove transcribing indicator
+                let tLoader = document.getElementById("transcribing-indicator");
+                if (tLoader) tLoader.remove();
+
+                // Handle timer expiration during transcription
+                if (transcribeData.redirect) {
+                    isRedirecting = true;
+                    // The main timer loop (checkAndRedirect) will handle the final goodbye
+                    return;
                 }
-    
-                // reset recording
-                document.getElementById("sendButton").disabled = true;
-                audioChunks = [];
+
+                // Append user message immediately if it exists
+                if (transcribeData.text && transcribeData.text.trim()) {
+                    let userDiv = document.createElement("div");
+                    userDiv.classList.add("chat-message", "sent");
+                    userDiv.innerHTML = `<p>${transcribeData.text}</p>`;
+                    chatBox.appendChild(userDiv);
+                } else {
+                    // Stop here if transcription is empty (e.g., silence)
+                    console.warn("Empty transcription received.");
+                    document.getElementById("sendButton").disabled = false;
+                    return;
+                }
+
+                // Show loading dots for AI
+                let loadingDiv = document.createElement("div");
+                loadingDiv.id = "loading-indicator";
+                loadingDiv.classList.add("chat-message", "received");
+                loadingDiv.innerHTML = `<p>Thinking<span class="loading-dots"></span></p>`;
+                chatBox.appendChild(loadingDiv);
+                scrollToBottom();
+
+                // Get the current number of rendered messages (excluding loading indicator)
+                const renderedCount = chatBox.querySelectorAll('.chat-message:not(#loading-indicator)').length;
+                
+                // 2. Trigger LLM Response
+                let interviewFormData = new FormData();
+                if (selectedOption) {
+                    interviewFormData.append("option", selectedOption.value);
+                }
+
+                return fetch("{% url 'interview' %}", {
+                    method: "POST",
+                    headers: { "X-CSRFToken": csrfToken, "X-Requested-With": "XMLHttpRequest" },
+                    body: interviewFormData
+                }).then(res => res.json()).then(data => {
+                    // Remove loading indicator
+                    let loader = document.getElementById("loading-indicator");
+                    if (loader) loader.remove();
+
+                    // Incremental append: only add messages that aren't already rendered
+                    const currentRenderedCount = chatBox.querySelectorAll('.chat-message').length;
+                    if (data.conversation && data.conversation.length > currentRenderedCount) {
+                        for (let i = currentRenderedCount; i < data.conversation.length; i++) {
+                            let msg = data.conversation[i];
+                            let div = document.createElement("div");
+                            div.classList.add("chat-message", msg.role === "user" ? "sent" : "received");
+                            div.innerHTML = `<p>${msg.content}</p>`;
+                            chatBox.appendChild(div);
+                        }
+                    }
+                    
+                    // Force scroll to bottom after layout update
+                    setTimeout(scrollToBottom, 50);
+                    
+                    if (data.audio) {
+                        const audio = new Audio(`data:audio/mp3;base64,${data.audio}`);
+                        audio.play();
+                        
+                        // If redirect flag is set, redirect after audio ends
+                        if (data.redirect && !isRedirecting) {
+                            isRedirecting = true;
+                            audio.onended = () => {
+                                window.location.href = "/score";
+                            };
+                        }
+                    } else if (data.redirect && !isRedirecting) {
+                        // Fallback if no audio
+                        isRedirecting = true;
+                        window.location.href = "/score";
+                    }
+        
+                    audioChunks = [];
+                    document.getElementById("sendButton").disabled = false;
+                });
             })
-            .catch(error => console.error("Error:", error));
+            .catch(error => {
+                console.error("Error:", error);
+                document.getElementById("sendButton").disabled = false;
+            });
         });
 
 
@@ -367,33 +462,58 @@
 
 
         function checkAndRedirect() {
+            if (isRedirecting) return; // Don't interfere if already redirecting
+
             fetch("/time")
                 .then(response => response.json()) // convert response to JSON
                 .then(data => {
-                    if (data.redirect === true) { // if response is true, redirect
-                        window.location.pathname = "/score";
-                    } else {
-                        // update progress bar
-                        document.getElementById("bar").style.width = data.time_progress + "%";
-                        document.getElementById("bar").setAttribute("aria-valuenow", Math.round(data.time_progress));
-        
-                        // use data.time (remaining time in seconds)
-                        let totalSeconds = Math.round(data.time);
-                        let hours = Math.floor(totalSeconds / 3600);
-                        let minutes = Math.floor((totalSeconds % 3600) / 60);
-                        let seconds = totalSeconds % 60;
-        
-                        // format to always show two digits (e.g., "09s" instead of "9s")
-                        document.getElementById("time-h").textContent = `${String(hours).padStart(2, "0")}h`;
-                        document.getElementById("time-m").textContent = `${String(minutes).padStart(2, "0")}m`;
-                        document.getElementById("time-s").textContent = `${String(seconds).padStart(2, "0")}s`;
+                    const progressBar = document.querySelector('.progress-bar');
+                    if (progressBar) {
+                        progressBar.style.width = `${data.time_progress}%`;
+                        progressBar.setAttribute('aria-valuenow', data.time_progress);
+                    }
+
+                    // Format remaining time to hh:mm:ss
+                    const remainingSeconds = data.time;
+                    const hours = Math.floor(remainingSeconds / 3600);
+                    const minutes = Math.floor((remainingSeconds % 3600) / 60);
+                    const seconds = Math.floor(remainingSeconds % 60);
+                    
+                    document.getElementById('time-h').textContent = `${hours.toString().padStart(2, '0')}h`;
+                    document.getElementById('time-m').textContent = `${minutes.toString().padStart(2, '0')}m`;
+                    document.getElementById('time-s').textContent = `${seconds.toString().padStart(2, '0')}s`;
+
+                    if (data.redirect && !isRedirecting) {
+                        isRedirecting = true;
+                        
+                        // Handle final goodbye message and audio
+                        if (data.message) {
+                            let aiDiv = document.createElement("div");
+                            aiDiv.classList.add("chat-message", "received");
+                            aiDiv.innerHTML = `<p>${data.message}</p>`;
+                            chatBox.appendChild(aiDiv);
+                            setTimeout(scrollToBottom, 50);
+                        }
+
+                        if (data.audio) {
+                            const audio = new Audio(`data:audio/mp3;base64,${data.audio}`);
+                            audio.play();
+                            audio.onended = () => {
+                                window.location.href = "/score";
+                            };
+                        } else {
+                            // Fallback if no audio
+                            window.location.href = "/score";
+                        }
                     }
                 })
-                .catch(error => console.error("Error:", error)); // errors
+                .catch(error => {
+                    console.error('Error checking time:', error);
+                });
         }
         
-        // run check every .5 second (500ms)
-        setInterval(checkAndRedirect, 500);
+        // Check for redirect every second
+        setInterval(checkAndRedirect, 1000);
       </script>
       <script>
         const video = document.getElementById('video');
@@ -424,7 +544,17 @@
           });
         }
         
-        window.onload = startWebcam;
+        window.onload = function() {
+            startWebcam();
+            scrollToBottom();
+            
+            // Play startup audio if available
+            const startupAudioBase64 = "{{ startup_audio }}";
+            if (startupAudioBase64) {
+                const audio = new Audio(`data:audio/mp3;base64,${startupAudioBase64}`);
+                audio.play().catch(e => console.error("Auto-play blocked or failed:", e));
+            }
+        };
       </script>
    
      

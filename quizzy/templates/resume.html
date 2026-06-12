@@ -177,6 +177,52 @@
           // Make the filename visible when a file is selected
           fileNameElement.style.visibility = 'visible';
         });
+
+        // Drag and Drop functionality
+        const fileUploadContainer = document.querySelector('.file-upload');
+        const fileInput = document.getElementById('file');
+
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            fileUploadContainer.addEventListener(eventName, preventDefaults, false);
+        });
+
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+
+        ['dragenter', 'dragover'].forEach(eventName => {
+            fileUploadContainer.addEventListener(eventName, highlight, false);
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            fileUploadContainer.addEventListener(eventName, unhighlight, false);
+        });
+
+        function highlight(e) {
+            fileUploadContainer.style.backgroundColor = '#f8f9fa';
+            fileUploadContainer.style.border = '2px dashed #3182CE';
+        }
+
+        function unhighlight(e) {
+            fileUploadContainer.style.backgroundColor = '';
+            fileUploadContainer.style.border = '';
+        }
+
+        fileUploadContainer.addEventListener('drop', handleDrop, false);
+
+        function handleDrop(e) {
+            const dt = e.dataTransfer;
+            const files = dt.files;
+
+            if (files && files.length > 0) {
+                fileInput.files = files; // Assign dropped files to the input
+                
+                // Trigger the change event manually to update UI
+                const event = new Event('change');
+                fileInput.dispatchEvent(event);
+            }
+        }
       </script>
       
     

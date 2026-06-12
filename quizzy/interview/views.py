@@ -1,22 +1,17 @@
-# from django.shortcuts import render
-# from django.views import View
+from django.shortcuts import render
+from django.views import View
 from django.http import JsonResponse,FileResponse,HttpRequest,HttpResponse
+import asyncio
 from rest_framework.views import APIView # type: ignore
 from rest_framework.response import Response # type: ignore
-from rest_framework.renderers import TemplateHTMLRenderer # type: ignore
 from rest_framework import status # type: ignore
-from django.http import StreamingHttpResponse
-from . import no_stream_camera_capture, resume_management,retriever,speech,scrape,camera_capture
+from . import no_stream_camera_capture, resume_management,retriever,speech,scrape
 from django.shortcuts import redirect
 from django.core.files.uploadedfile import UploadedFile
 from dotenv import load_dotenv
-import asyncio
 import base64
 import time
-import whisper  # type: ignore
 from io import BytesIO
-import tempfile
-from concurrent.futures import ThreadPoolExecutor
 from reportlab.pdfgen import canvas
 from textwrap import wrap
 import logging
@@ -30,10 +25,10 @@ load_dotenv()
 # Create your views here.
 
 
-capture=no_stream_camera_capture.VideoCamera() #change to camera_capture for steaming webcamp data to server
+capture = no_stream_camera_capture.VideoCamera()  # change to camera_capture for steaming webcamp data to server
 
-rag_instance=retriever.RAG()
-model = whisper.load_model("base")
+stt_generator = speech.STTGenerator()
+tts_generator = speech.SpeechGenerator()
 
 class SessionMixin: 
     """Mixin to reset session-related data and updates."""
@@ -42,14 +37,13 @@ class SessionMixin:
         """Resets session validation status and removes unnecessary session data."""
         request.session["validation"] = False
         request.session["completed"] = True
-        for key in ("history", "eval","time"):
+        for key in ("history", "eval","time", "startup_audio_played", "suggested_questions", "questions_asked", "total_score", "eval_count"):
             if key in request.session:
                 del request.session[key]
-        capture.reset_updates()
-        rag_instance.score_reset()
+        capture.reset_updates(request.session)
 
 
-class Home(APIView, SessionMixin):
+class Home(View, SessionMixin):
     """
     API view for rendering the home page.
 
@@ -57,15 +51,14 @@ class Home(APIView, SessionMixin):
     - Resets session validation on each request.
     - Removes chat history, evaluation, emotional probalilities.
     """ 
-    renderer_classes=[TemplateHTMLRenderer]
 
-    def get(self,request: HttpRequest) -> Response:
+    def get(self,request: HttpRequest) -> HttpResponse:
         logger.info("Loading home page.")
         self.reset_session(request)
-        return Response(template_name="home.html")
+        return render(request, "home.html")
 
 
-class Myview(APIView, SessionMixin):
+class Myview(View, SessionMixin):
     """
     View class for handling resume validation.
 
@@ -84,9 +77,8 @@ class Myview(APIView, SessionMixin):
         - resume_obj: Instance of the Resume class for resume processing.
         - threshold: Minimum ATS score required for validation.
     """
-    renderer_classes=[TemplateHTMLRenderer]
 
-    def get(self,request: HttpRequest) -> Response:
+    async def get(self,request: HttpRequest) -> HttpResponse:
         
         """
         Handles GET requests to load the resume validation page.
@@ -99,10 +91,10 @@ class Myview(APIView, SessionMixin):
         """
         logger.info("Loading resume validation page.")
         self.reset_session(request)
-        return Response(template_name="resume.html")
+        return render(request, "resume.html")
     
     
-    def post(self,request: HttpRequest) -> HttpResponse:
+    async def post(self,request: HttpRequest) -> HttpResponse:
 
         """
         Handles POST requests for resume validation.
@@ -174,20 +166,28 @@ class Myview(APIView, SessionMixin):
             }
 
             try:
-               ats_score, resume, job_description, dictionary = self.resume_obj.final(file,description)
+               ats_score, resume, job_description, dictionary = await self.resume_obj.final(file,description)
             except TypeError:
                 logger.error("ResumeManagement failed to retrieve relevent info")
-                redirect("eligibility")
+                return redirect("eligibility")
             
             request.session.update({
                 "user":dictionary,
                 "countdown":countdown,
-                "position":position.get(options,[1,2,3])
+                "level": options,
+                "position":position.get(options,[1,2,3]),
+                "completed": True
             })
+            # Reset the timer for the new interview
+            if "time" in request.session:
+                del request.session["time"]
+            
+            # Ensure the session has a key to use for ChromaDB collection uniqueness
+            if not request.session.session_key:
+                request.session.create()
 
-            rag_instance.level = options 
+            rag_instance = retriever.RAG(session_id=request.session.session_key, level=options)
             rag_instance.resume=resume
-            summary=rag_instance.candidate_document_summarization()
 
             if ats_score >= self.threshold:
                 logger.info(f"ATS validation passed with score: {ats_score}")
@@ -195,9 +195,20 @@ class Myview(APIView, SessionMixin):
                 request.session.update({
                     "ATS": ats_score,
                     "validation": True,
-                    "summary":summary
+                    "summary": dictionary.get("summary", "No summary available")
                 })
+                
+                logger.info("Inserting documents into Chroma...")
                 rag_instance.document_insertion_chroma(resume,job_description)
+                
+                logger.info("Triggering prepare_questions...")
+                # Prepare structured questions at the beginning
+                suggested_questions = await rag_instance.prepare_questions(resume, job_description)
+                request.session["suggested_questions"] = suggested_questions
+                request.session["questions_asked"] = 0
+                request.session.modified = True
+                
+                logger.info(f"Resume validation process complete. suggested_pool_len={len(suggested_questions)}, redirecting to interview.")
                 return redirect("interview")
             else:
                 logger.warning(f"ATS validation failed with score: {ats_score}")
@@ -212,15 +223,40 @@ class Myview(APIView, SessionMixin):
 
 
 
-class Interview(APIView):
+class TranscribeView(View):
+    """
+    Handles speech-to-text transcription as a separate step before LLM generation.
+    """
+    async def post(self, request: HttpRequest) -> JsonResponse:
+        # Check if time is already up
+        start_time = request.session.get("time")
+        interview_duration = int(request.session.get("countdown", 10)) * 60
+        if start_time and (time.time() - start_time >= interview_duration):
+            return JsonResponse({"text": "TIMEOUT_SKIP", "redirect": True})
+
+        audio_file: UploadedFile | None = request.FILES.get('audio')
+        if not audio_file:
+            return JsonResponse({"error": "No audio provided"}, status=400)
+            
+        result: dict[str,str] = await stt_generator.transcribe(audio_file, language="en")
+        user_response: str = result.get("text", "")
+        
+        chat_history: list = request.session.get("history", [])
+        if user_response:
+            chat_history.append({"role": "user", "content": user_response})
+            request.session["history"] = chat_history
+            request.session.modified = True
+            
+        return JsonResponse({"text": user_response})
+
+class Interview(View):
 
     """
     Handles the interview process by rendering the interview page 
     and processing user responses using RAG (Retrieval-Augmented Generation).
     """
-    renderer_classes=[TemplateHTMLRenderer]
 
-    def get(self,request: HttpRequest) -> Response | HttpResponse: 
+    async def get(self,request: HttpRequest) -> HttpResponse: 
         """
         Renders the interview page if the user has passed validation.
 
@@ -240,22 +276,51 @@ class Interview(APIView):
         
 
         user: str = request.session["user"]["candidate"]
-        chat_history: list[dict[str, str]] =request.session.setdefault(
-            "history",[{"speaker":"ai","chat":f"Hi {user}, shall we begin?"}]
-            )
+        domain: str = request.session.get("user", {}).get("job")
+        level: str = request.session.get("level")
+        suggested_questions = request.session.get("suggested_questions", [])
+        
+        logger.info(f"Interview GET: suggested_pool_len={len(suggested_questions)}")
+        
+        rag_instance = retriever.RAG(session_id=request.session.session_key, level=level)
+
+        initial_history: list[dict[str, str]] = [
+            {"role": "system", "content": rag_instance.get_system_prompt(is_final=False, domain=domain, level=level)},
+            {"role": "assistant", "content": f"Hi {user}, are you ready for the interview?"}
+        ]
+        chat_history: list[dict[str, str]] = request.session.setdefault("history", initial_history)
         ats_score: int = request.session["ATS"]
         summary: str = request.session["summary"]
-        return Response(
-                {"conversation": chat_history,"ats":ats_score,"summary":summary},
-                template_name="interview.html"
+        
+        # Filter out system prompt for display
+        display_history = [msg for msg in chat_history if msg["role"] != "system"]
+
+        startup_audio = ""
+        if not request.session.get("startup_audio_played"):
+            # Use voice from session if available, default to male
+            session_voice = request.session.get("voice", "male")
+            # Generate startup audio for the initial greeting
+            startup_message = initial_history[1]["content"]
+            audio_bytes: bytes = await tts_generator.text_to_speech(startup_message, voice=session_voice)
+            startup_audio = base64.b64encode(audio_bytes).decode('utf-8')
+            request.session["startup_audio_played"] = True
+
+        # Initialize interview timer if not already set
+        if "time" not in request.session:
+            request.session["time"] = time.time()
+            request.session.modified = True
+        
+        return render(
+                request,
+                "interview.html",
+                {"conversation": display_history,"ats":ats_score,"summary":summary,"startup_audio": startup_audio}
             )
     # ,"time":60
 
-    def post(self,request:  HttpRequest) -> JsonResponse | Response:
+    async def post(self,request:  HttpRequest) -> JsonResponse | HttpResponse:
         """
         Processes user responses from the interview form.
 
-        - Handles audio file input for speech-to-text transcription.
         - Uses RAG to generate follow-up questions based on the user's response.
         - Evaluates the user's answer and stores the evaluation.
         - Converts the AI-generated response into speech and encodes it in Base64.
@@ -265,75 +330,166 @@ class Interview(APIView):
             request (HttpRequest): The incoming POST request.
 
         Returns:
-            JsonResponse | Response: A JSON response with updated conversation data 
-        
+            JsonResponse | Response: A JSON response with updated conversation data
+
         """
-        audio_file: UploadedFile | None = request.FILES.get('audio')
+        # Check if time is already up before processing LLM
+        start_time = request.session.get("time")
+        interview_duration = int(request.session.get("countdown", 10)) * 60
+        if start_time and (time.time() - start_time >= interview_duration):
+             return JsonResponse({"redirect": True})
+
         sound: str | None =request.POST.get("option")
-        
-        chat_history: list = request.session.get("history", [])
-        evaluation: list=request.session.setdefault("eval",[])
-        
-        if audio_file:
-            with tempfile.NamedTemporaryFile(delete=True, suffix=".wav") as temp_audio:
-                temp_audio.write(audio_file.read())
-                temp_audio.flush()  # ensure all data is written before processing
-                result: dict[str,str] = model.transcribe(temp_audio.name,language="en")
-                user_response: str = result["text"]
-                logger.info("Trascription successful")
-        else:
-            logger.error("Audio not recived in the server")
-            return Response({"conversation": chat_history}, template_name="interview.html")
-        
-        if  user_response:
-            chat_history.append({"speaker":"human","chat": user_response})
-            previous_question: str=chat_history[-2]["chat"]
-        
-           #---------------------------------------------------------------------------------------
-            with ThreadPoolExecutor() as executor:
-                future_questions = executor.submit(rag_instance.socratic_conversation, previous_question, user_response)
-                future_response = executor.submit(rag_instance.evaluate_answer, future_questions.result(), user_response)
-                
-            questions:str=future_questions.result()
-            response:str=future_response.result()
-            # -------------------------------------------------------------------------------------
-            
-            evaluation.append(base64.b64encode(response.encode('utf-8')).decode('utf-8'))
-            logger.info("Evaluation added to session")
-          
-            if questions:
-               chat_history.append({"speaker":"ai","chat":questions})
-            else:
-                chat_history.append({"speaker":"ai","chat":"thank you"})
+        if sound:
+            request.session["voice"] = sound
             request.session.modified = True
-      
-          
-        audio_bytes: bytes =asyncio.run(speech.text_to_speech(str(questions),sound))
+            
+        chat_history: list = request.session.get("history", [])
+
+        if not chat_history or chat_history[-1]["role"] != "user":
+            logger.error("No recent user message found in history")
+            return JsonResponse({"error": "No user message found"}, status=400)
+
+        #---------------------------------------------------------------------------------------
+        suggested_questions = request.session.get("suggested_questions")
+        questions_asked = request.session.get("questions_asked", 0)
+        
+        rag_instance = retriever.RAG(session_id=request.session.session_key)
+
+        # Safety check: if suggested_questions is missing or empty but we haven't reached 15 questions, re-fill it.
+        if (not suggested_questions) and questions_asked < 15:
+            logger.warning(f"suggested_questions missing/empty in session at turn {questions_asked}. Re-loading from fallback.")
+            suggested_questions = rag_instance.fallback_questions
+            request.session["suggested_questions"] = suggested_questions
+
+        logger.info(f"Interview Turn: questions_asked={questions_asked}, suggested_pool_len={len(suggested_questions) if suggested_questions else 0}")
+
+        # Track progress
+        request.session["questions_asked"] = questions_asked + 1
+
+        # Completion is strictly determined by the server-side counter
+        interview_complete = False
+        candidate_name = request.session.get("user", {}).get("candidate")
+        domain = request.session.get("user", {}).get("job")
+        level = request.session.get("level")
+
+        if questions_asked >= 14: # Turn 15 (0-indexed) is the final question
+             logger.info("Final question reached. Setting completion flag.")
+             interview_complete = True
+             # Ensure the AI says its final goodbye
+             questions = await rag_instance.socratic_conversation(chat_history, [], candidate_name=candidate_name, domain=domain, level=level)
+        else:
+            questions = await rag_instance.socratic_conversation(chat_history, suggested_questions, candidate_name=candidate_name, domain=domain, level=level)
+            if suggested_questions:
+                suggested_questions.pop(0)
+                request.session["suggested_questions"] = suggested_questions
+        
+        logger.info(f"LLM Response: {questions[:100]}...")
+
+        # -------------------------------------------------------------------------------------
+        # EVALUATION DEFERRED TO SCORE PAGE
+        # -------------------------------------------------------------------------------------
+
+        if questions:
+           chat_history.append({"role": "assistant", "content": questions})
+        else:
+            chat_history.append({"role": "assistant", "content": "thank you"})
+        
+        # Save state
+        request.session["history"] = chat_history
+        request.session.modified = True
+
+
+        if not questions:
+            questions = "I apologize, but I encountered an error. Could you please repeat that?"
+
+        audio_bytes: bytes = await tts_generator.text_to_speech(questions, voice=sound or "male")
         audio_base64: str = base64.b64encode(audio_bytes).decode('utf-8')
         logger.info("Audio encoding to Base64 completed successfully")
+
+        # Filter out system prompt for display in AJAX response
+        display_history = [msg for msg in chat_history if msg["role"] != "system"]
+
         #jasonResponse is used to avoid page reloading when form is submitted
         if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-            return JsonResponse({"conversation": chat_history,"audio": audio_base64})
-
-        return Response(
-            {"conversation": chat_history}, template_name="interview.html"
-            )
+            return JsonResponse({
+                "conversation": display_history,
+                "audio": audio_base64,
+                "redirect": interview_complete
+            })
+        return render(request, "interview.html", {"conversation": display_history})
     
 
 
     
-class Score(APIView):
+class BatchEvaluationView(View):
+    """
+    Evaluates the entire interview history in one batch.
+    """
+    async def get(self, request: HttpRequest) -> JsonResponse:
+        chat_history = request.session.get("history", [])
+        if not chat_history:
+            return JsonResponse({"status": "no_history"})
+
+        evaluations = []
+        total_score = 0
+        count = 0
+        
+        rag_instance = retriever.RAG(session_id=request.session.session_key)
+
+        user_message_count = 0
+        # Iterate through history to find Q&A pairs
+        # Only evaluate actual questions and answers, ignoring greetings and the final goodbye.
+        for i in range(len(chat_history)):
+            if chat_history[i]["role"] == "user":
+                user_message_count += 1
+                
+                # Skip the first user message (usually "Yes" to "Are you ready?")
+                if user_message_count == 1:
+                    continue
+                    
+                user_answer = chat_history[i]["content"]
+                # The question is the assistant message preceding this user answer
+                question = ""
+                for j in range(i-1, -1, -1):
+                    if chat_history[j]["role"] == "assistant":
+                        question = chat_history[j]["content"]
+                        break
+
+                if question:
+                    res = await rag_instance.evaluate_answer(question, user_answer)
+                    if res:
+                        total_score += res["score"]
+                        count += 1
+                        # Encode for PDF generator compatibility
+                        eval_str = f"Score: {res['score']}\nReason: {res['reason']}\nBetter Answer: {res['better']}\nFeedback: {res['communication_feedback']}"
+                        evaluations.append(base64.b64encode(eval_str.encode('utf-8')).decode('utf-8'))
+
+        request.session["eval"] = evaluations
+        request.session["total_score"] = total_score
+        request.session["eval_count"] = count
+        request.session.modified = True
+
+        if count == 0:
+            return JsonResponse({"status": "no_history"})
+
+        percentage = int((total_score / count) * 10)
+        return JsonResponse({
+            "status": "complete",
+            "score": percentage,
+            "eval_count": count
+        })
+
+class Score(View):
 
     """
-    Handles the interview scoring process, evaluates candidate performance, 
+    Handles the interview scoring process, evaluates candidate performance,
     and provides job recommendations based on the interview results.
     """
-    renderer_classes=[TemplateHTMLRenderer]
-    
-    def get(self, request : HttpRequest) -> JsonResponse | Response:
+    def get(self, request : HttpRequest) -> HttpResponse:
         """
-        Retrieves interview scores, evaluates candidate performance, 
-        and provides job recommendations. 
+        Retrieves interview scores, evaluates candidate performance,
+        and provides job recommendations.
 
         - Redirects to the eligibility page if validation is not present in the session.
         - Computes the final interview score based on the evaluation count.
@@ -342,24 +498,27 @@ class Score(APIView):
         - Passes all calculated metrics to the score template.
 
         Returns:
-            Response: Renders the score.html template with evaluation results, 
+            Response: Renders the score.html template with evaluation results,
             perception analysis, job recommendations, and ATS score.
         """
         logger.info("Score view accessed.")
         if not request.session.get("validation"):
             logger.warning("Validation missing in session redirecting to eligibility page")
             return redirect("eligibility")
-        
-        percentage = int((rag_instance.score / rag_instance.count) * 10) if rag_instance.count else 0
+
+        total_score = request.session.get("total_score", 0)
+        count = request.session.get("eval_count", 0)
+        percentage = int((total_score / count) * 10) if count else 0
+
         jobs=request.session["user"]["job"]
         position=request.session.get("position",[1,2,3,4])
         scrape_instance=scrape.Scrape(job=jobs,pos=position)
         job_details=scrape_instance.data_extraction(10)
 
-        vision_system=capture.p
+        vision_system=capture.get_latest_prediction(request.session)
 
         perception=abs(round((vision_system[0]+vision_system[1])-vision_system[2],2))
-        
+
         posture=round((100-vision_system[3]),2)
 
         ats_score=request.session["ATS"]
@@ -369,9 +528,12 @@ class Score(APIView):
                  "score":percentage,
                  "perception":perception,
                  "posture":posture,
-                 "ats":ats_score}
+                 "ats":ats_score,
+                 "eval_count": count,
+                 "eval_ready": "eval" in request.session}
+
         logger.info("Score computation successful returning response")
-        return Response(context,template_name="score.html" )
+        return render(request, "score.html", context)
 
     def post(self, request : HttpRequest) -> FileResponse:
         """
@@ -415,27 +577,27 @@ class Score(APIView):
         logger.info("PDF generation complete.")
         return FileResponse(buffer, as_attachment=True, filename="evaluation.pdf")
 
-class Cam(APIView):
-    """  
-    This view class streams webcam data to "interview.html".  
-    It generates frames from the webcam and returns them as a streaming HTTP response.  
-    """  
-    def get(self,request: HttpRequest) -> StreamingHttpResponse | Response:
-        """  
-        Handles GET requests to stream webcam frames.  
+# class Cam(APIView):
+#     """  
+#     This view class streams webcam data to "interview.html".  
+#     It generates frames from the webcam and returns them as a streaming HTTP response.  
+#     """  
+#     def get(self,request: HttpRequest) -> StreamingHttpResponse | Response:
+#         """  
+#         Handles GET requests to stream webcam frames.  
 
-        Returns:  
-            - StreamingHttpResponse: If the frames are successfully generated and streamed.  
-            - Response: If an error occurs while streaming the camera feed, returning a 500 error.  
-        """  
-        try:
-            # logger.info("Attempting to stream webcam data.")
-            return StreamingHttpResponse(camera_capture.generate_frames(capture), content_type="multipart/x-mixed-replace;boundary=frame")
-        except Exception as e: # This is bad!
-            # logger.error(f"Camera stream error: {e}")
-            return Response(
-                {"error":"Camera stream error"},status=500
-                ) 
+#         Returns:  
+#             - StreamingHttpResponse: If the frames are successfully generated and streamed.  
+#             - Response: If an error occurs while streaming the camera feed, returning a 500 error.  
+#         """  
+#         try:
+#             # logger.info("Attempting to stream webcam data.")
+#             return StreamingHttpResponse(camera_capture.generate_frames(capture), content_type="multipart/x-mixed-replace;boundary=frame")
+#         except Exception as e: # This is bad!
+#             # logger.error(f"Camera stream error: {e}")
+#             return Response(
+#                 {"error":"Camera stream error"},status=500
+#                 ) 
         
 class No_Stream_Cam(APIView):
     """
@@ -464,6 +626,15 @@ class No_Stream_Cam(APIView):
         try:
             if not image_data:
                 return Response({'status': 'error'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+            # High-precision rate limiting: ignore frames if sent too frequently (min 0.45s interval)
+            current_time = time.perf_counter()
+            last_frame_time = request.session.get('last_frame_time', 0)
+            
+            if current_time - last_frame_time < 0.45:
+                return Response({'status': 'ignored'}, status=status.HTTP_200_OK)
+
+            request.session['last_frame_time'] = current_time
         
             _, encoded_data = image_data.split('base64,', 1)
             decoded_image = base64.b64decode(encoded_data)
@@ -471,67 +642,86 @@ class No_Stream_Cam(APIView):
             np_arr = np.frombuffer(decoded_image, np.uint8)
             
             frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
-            
-            capture.get_frame(frame) 
-            
+
+            capture.get_frame(frame, request.session)
+
             return Response({'status': 'success'}, status=status.HTTP_200_OK)
 
         except Exception as e:
             logger.error(f"Error occured in the non backend streaming image processing : {e}")
             return Response({'status': 'error'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)   
         
-class PredictionView(APIView):
-    """  
-    This view class fetches and streams the latest prediction data to "interview.html".  
-    """  
-    def get(self, request: HttpRequest) -> JsonResponse:
-        """  
-        Handles GET requests to retrieve the latest prediction result.  
+class PredictionView(View):
+    """
+    This view class fetches and streams the latest prediction data to "interview.html".
+    """
+    async def get(self, request: HttpRequest) -> JsonResponse:
+        """
+        Handles GET requests to retrieve the latest prediction result.
 
-        Returns:  
-            - JsonResponse: A JSON object containing the latest prediction value.  
-        """  
+        Returns:
+            - JsonResponse: A JSON object containing the latest prediction value.
+        """
         # logger.info("Fetching latest prediction.")
-        prediction = capture.get_latest_prediction()
+        prediction = capture.get_latest_prediction(request.session)
         # logger.info(f"Latest prediction retrieved : {prediction}")
         return JsonResponse(
             {"prediction": prediction}
             )
-    
-class Check(APIView):
-    """  
-    This view class calculates the duration of an interview session  
-    and provides information on the remaining time and progress.  
-    """ 
-    def get(self,request: HttpRequest) -> JsonResponse:
-        """  
-        Handles GET requests to compute the interview session duration.  
 
-        Returns:  
-            - JsonResponse: A JSON object containing:  
-                - redirect: A boolean indicating if the interview has reached its time limit.  
-                - time: The remaining time (in seconds) before the session ends.  
-                - time_progress: The percentage of elapsed time relative to the total duration.  
-        """  
+class Check(View):
+    """
+    This view class calculates the duration of an interview session
+    and provides information on the remaining time and progress.
+    """
+    async def get(self,request: HttpRequest) -> JsonResponse:
+        """
+        Handles GET requests to compute the interview session duration.
+
+        Returns:
+            - JsonResponse: A JSON object containing:
+                - redirect: A boolean indicating if the interview has reached its time limit.
+                - time: The remaining time (in seconds) before the session ends.
+                - time_progress: The percentage of elapsed time relative to the total duration.
+        """
         # logger.info("Checking interview duration.")
         interview_duration=int(request.session.get("countdown",10))*60
-        if not request.session.get("time"):
-            request.session["time"]=time.time()
-      
-        elapse=time.time()-request.session.get("time")
+
+        # Ensure start time is set and persisted exactly once per interview
+        if "time" not in request.session:
+            request.session["time"] = time.time()
+            request.session.modified = True
+
+        start_time = request.session["time"]
+
+        elapse=time.time()-start_time
         remaining_time = max(0, interview_duration - elapse)
         progress = min(100, (elapse / interview_duration) * 100) 
         if elapse >= interview_duration: # time limit of interview
-            logger.info("Interview time limit reached. Redirecting.")
-            del request.session["time"]
-            for key in ("history", "eval"):
-                if key in request.session:
-                    del request.session[key]
-            request.session["completed"]=False
-            return JsonResponse({"redirect":True})
+            logger.info("Interview time limit reached. Preparing final goodbye.")
+            request.session["completed"] = False # Prevents re-entering the interview
+            request.session.modified = True
+            
+            # Load RAG instance to get access to fallback goodbyes
+            rag_instance = retriever.RAG(session_id=request.session.session_key)
+            import random
+            final_msg = random.choice(rag_instance.fallback_goodbyes)
+            
+            # Prepend a notice that time is up
+            final_msg = f"The interview time is up. {final_msg}"
+
+            # Generate audio bytes asynchronously
+            session_voice = request.session.get("voice", "male")
+            audio_bytes = await tts_generator.text_to_speech(final_msg, voice=session_voice)
+            audio_base64 = base64.b64encode(audio_bytes).decode('utf-8')
+
+            return JsonResponse({
+                "redirect": True,
+                "message": final_msg,
+                "audio": audio_base64
+            })
         # logger.info(f"Time remaining: {remaining_time} seconds. Progress: {progress}%")
         return JsonResponse(
                 {'redirect':False,"time":remaining_time,"time_progress":progress}
             )
-    
 

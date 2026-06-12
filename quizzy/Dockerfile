@@ -16,7 +16,7 @@ ENV PATH="/root/.ollama/bin:$PATH"
 RUN pip install --no-cache-dir -r requirements.txt 
 
 # pull models using the CLI
-RUN ollama pull llama3.2:1b && ollama pull mxbai-embed-large:latest
+# RUN ollama pull llama3.2:1b && ollama pull mxbai-embed-large:latest
 
 EXPOSE 8000
 

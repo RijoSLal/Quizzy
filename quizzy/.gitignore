@@ -11,3 +11,4 @@ container/
 chroma_langchain_db/
 db.sqlite3
 dbug.log
+model/emotion_model.keras

@@ -1,12 +1,12 @@
 beautifulsoup4==4.13.3
 Django==5.1.2
 djangorestframework==3.15.2
-edge_tts==7.0.0
-groq==0.20.0
+https://github.com/KittenML/KittenTTS/releases/download/0.8.1/kittentts-0.8.1-py3-none-any.whl
+soundfile
+openai
 keras==3.8.0
 langchain==0.3.21
 langchain_chroma==0.2.2
-langchain_google_genai==2.1.1
 langchain_ollama==0.3.0
 mediapipe==0.10.20
 mlflow==2.20.1
@@ -23,8 +23,7 @@ Requests==2.32.3
 transformers==4.45.2
 openai-whisper
 tensorflow
-langchain-groq
-uvicorn 
-
+uvicorn
+kittentts
 
 

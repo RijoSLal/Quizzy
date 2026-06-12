@@ -24,9 +24,9 @@ Watch the full walkthrough of how Quizzy functions and performs an AI-driven int
    - Name and domain extraction
    - Resume-job description similarity using MXBAI embeddings (cosine similarity)
 3. **Interview Phase**:
-   - Dynamic question generation via Groq's LLaMA 70B model
+   - Dynamic question generation using open-weights LLM
    - Document retrieval from ChromaDB with Gemini embeddings
-   - Real-time TTS (Edge TTS) and STT (Whisper)
+   - Real-time TTS (Kitten TTS) and STT (Whisper)
    - Vision-based posture and emotion detection using MediaPipe and MobileNet
    - Profile summarization using HuggingFace model
 4. **Post Interview**:
@@ -39,8 +39,8 @@ Watch the full walkthrough of how Quizzy functions and performs an AI-driven int
 - **Model Management**: MLflow
 - **Experiment Tracking & Versioning**: DagsHub
 - **Vision Models**: MobileNet (transfer learned), MediaPipe
-- **Text Models**: Groq (LLaMA 70B), Gemini Embeddings
-- **TTS/STT**: Edge TTS and Whisper
+- **Text Models**: Qwen3:4b-Instruct, T5-small
+- **TTS/STT**: Kitten TTS and Whisper
 - **Resume Matching**: MXBAI embeddings
 - **Document Store**: ChromaDB
 
@@ -55,7 +55,7 @@ Watch the full walkthrough of how Quizzy functions and performs an AI-driven int
 
 - **CPU:** 12 threads (e.g., 4P + 4E cores, 2.0 GHz+)
 - **RAM:** 6 GB
-- **GPU:** Integrated, 48 EUs+, OpenGL 4.5+
+- **GPU:** Integrated, 48 EUs+, OpenGL 4.5+ -> Recommended for local LLM inference.
 
 > ⚠️ Systems below these specs may face performance issues or instability.
 
@@ -79,11 +79,12 @@ To configure a **production-ready self-hosted environment using NGINX and Cloudf
 ### Setup
 
 ```bash
-git clone https://github.com/RijoSLal/quizzy.git
-cd quizzy
+git clone https://github.com/RijoSLal/Quizzy.git
+cd Quizzy
 python -m venv venv
 source venv/bin/activate  # or venv\Scripts\activate on Windows
 pip install -r requirements.txt
+cd quizzy
 ```
 
 ### Set Environment Variables
@@ -91,11 +92,14 @@ pip install -r requirements.txt
 Create a `.env` file:
 
 ```env
-APIKEY=gemini_api_key
-GROQ=groq_api_key
-GROQQ=groq_api_key
-GROQ_API_KEY=groq_api_key
-DJANGO=django_secret_key
+# The base URL for the Ollama server (or your OpenAI-compatible API endpoint)
+OLLAMA_BASE_URL="http://localhost:11434/v1"
+
+# The API key required by the service (if applicable)
+OLLAMA_API_KEY="key"
+
+# Set to "True" or "False" to control telemetry data collection
+ANONYMIZED_TELEMETRY="False"
 ```
 
 ### Run Tests
@@ -151,6 +155,10 @@ quizzy/
 │   ├── speech.py
 │   ├── vectordb.py
 │   └── views.py
+├── model/
+│   └── emotion_model.keras
+├── assets/
+│   └── fallback_questions.json
 ├── manage.py
 ├── quizzy/
 │   ├── settings.py

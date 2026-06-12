@@ -1,9 +1,12 @@
+import os
+import tensorflow as tf
 import cv2
 import numpy as np
 from keras.applications.mobilenet_v3 import preprocess_input # type: ignore
 import mlflow
 import mediapipe as mp
 import logging
+import random
 
 logger = logging.getLogger("interview")
 
@@ -13,7 +16,28 @@ mlflow.set_tracking_uri("https://dagshub.com/slalrijo2005/Quizzy.mlflow")
 model_name = "mobilenet_model"
 model_version = 4
 model_uri = f"models:/{model_name}/{model_version}"
-model = mlflow.tensorflow.load_model(model_uri)
+server_model_pth = os.path.join("model", "emotion_model.keras")
+
+class MockModel:
+    """A mock model that returns safe predictions when the real model cannot be loaded."""
+    def predict(self, img):
+        # Returns a random prediction simulating the output array
+        return np.array([[random.random(), random.random(), random.random()]])
+
+try:
+    if os.path.exists(server_model_pth):
+        logger.info(f"Loading model from server path: {server_model_pth}")
+        model = tf.keras.models.load_model(server_model_pth)
+        logger.info("Server model loaded successfully.")
+    else:
+        logger.info("Server model file not found. Attempting to load from MLflow (DagsHub)...")
+        model = mlflow.tensorflow.load_model(model_uri)
+        logger.info("MLflow model loaded successfully. Saving to server path...")
+        model.save(server_model_pth)
+        logger.info(f"Model saved to {server_model_pth}")
+except Exception as e:
+    logger.warning(f"Failed to load model: {e}. Using MockModel instead.")
+    model = MockModel()
 
 # Initialize MediaPipe Face Mesh
 mp_face_mesh = mp.solutions.face_mesh
@@ -24,10 +48,6 @@ face_mesh = mp_face_mesh.FaceMesh(min_detection_confidence=0.5)
 class VideoCamera(object):
     def __init__(self):
         self.running = True
-        self.counts = [0] * 3  # Counts for [0, 1, 2]
-        self.total = 0  # Total frames processed
-        self.pos_count = 0  # Count occurrences where pos is True
-        self.p = [0, 0, 0, 0]  # Probabilities 
 
     def detect_head_down(self, nose: tuple[int, int], left_eye: tuple[int, int], right_eye: tuple[int, int]) -> bool:
         """
@@ -60,7 +80,7 @@ class VideoCamera(object):
         lm = face_landmarks.landmark[lm_id]
         return int(lm.x * w), int(lm.y * h)
 
-    def get_frame(self,frame) -> bytes:
+    def get_frame(self,frame,session) -> bytes:
         """
         Captures a frame, processes facial landmarks, detects emotions and head position,
         and encodes the frame into JPEG format.
@@ -106,14 +126,14 @@ class VideoCamera(object):
 
                         prediction = model.predict(img)
                         predicted_class = np.argmax(prediction)
-                        self.upgrade(predicted_class,head_position)
+                        self.upgrade(predicted_class,head_position,session)
                     except Exception as e:
                         logger.error(f"Prediction error : {str(e)}",exc_info=True)
 
         _, jpeg = cv2.imencode('.jpg', image)
         return jpeg.tobytes()
 
-    def upgrade(self, emo: int, pos: bool) ->None:
+    def upgrade(self, emo: int, pos: bool, session) ->None:
         """
         Updates emotion counts and calculates probability distribution.
 
@@ -121,31 +141,39 @@ class VideoCamera(object):
             emo (int): Predicted emotion class index.
             pos (bool): Boolean indicating head position (True if head is down).
         """
-        self.counts[emo] += 1
-        self.total += 1
+        counts = session.get('camera_counts', [0, 0, 0])
+        total = session.get('camera_total', 0)
+        pos_count = session.get('camera_pos_count', 0)
+
+        counts[emo] += 1
+        total += 1
         if pos:
-            self.pos_count += 1  
+            pos_count += 1
+
+        session['camera_counts'] = counts
+        session['camera_total'] = total
+        session['camera_pos_count'] = pos_count
 
         # update probabilities
-        self.p = [round((count / self.total) * 100, 2) for count in self.counts]
-        self.p.append(round((self.pos_count / self.total) * 100, 2))  # Append positive probability
-        # logger.info(f"Updated probabilities: {self.p}")
+        p = [round((count / total) * 100, 2) for count in counts]
+        p.append(round((pos_count / total) * 100, 2))
+        session['camera_p'] = p
 
     
-    def get_latest_prediction(self)-> list[float]:
+    def get_latest_prediction(self, session)-> list[float]:
         """
         Returns the latest calculated probability distribution of emotions and head position.
 
         Returns:
             list[float]: List containing emotion probabilities and head position probability.
         """
-        return self.p
+        return session.get('camera_p', [0, 0, 0, 0])
     
-    def reset_updates(self) -> None:
+    def reset_updates(self, session) -> None:
         """
         Resets the updated probabilities
         """
-        self.counts = [0] * 3  # Counts for [0, 1, 2]
-        self.total = 0  # Total frames processed
-        self.pos_count = 0  # Count occurrences where pos is True
-        self.p = [0, 0, 0, 0]  # Probabilities
+        session['camera_counts'] = [0, 0, 0]
+        session['camera_total'] = 0
+        session['camera_pos_count'] = 0
+        session['camera_p'] = [0, 0, 0, 0]

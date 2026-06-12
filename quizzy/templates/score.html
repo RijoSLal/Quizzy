@@ -71,7 +71,7 @@
                     {% csrf_token %}
                     <img src="{% static 'images/Download cloud.png' %}" alt="">
                     <div class="d-flex justify-content-center align-items-center pt-3 fw-bold">
-                         <p>Resport Card</p>
+                         <p id="report-card-text">Report Card</p>
                         <button type="submit" id="download-button">Download PDF</button>
                     </div>
                     <p>review areas of improvement</p>
@@ -133,5 +133,74 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    document.addEventListener("DOMContentLoaded", function() {
+        const evalReady = "{{ eval_ready|yesno:'true,false' }}" === "true";
+        const evalCount = parseInt("{{ eval_count|default:0 }}");
+        const downloadButton = document.getElementById("download-button");
+        const reportCardText = document.getElementById("report-card-text");
+        const scoringDisplay = document.querySelector(".scoring");
+
+        // Helper to show no history state
+        function showNoHistory() {
+            downloadButton.disabled = true;
+            downloadButton.textContent = "No Evaluation";
+            downloadButton.style.opacity = "0.7";
+            downloadButton.style.cursor = "not-allowed";
+            reportCardText.style.display = "none";
+        }
+
+        if (evalReady && evalCount === 0) {
+            showNoHistory();
+        } else if (!evalReady) {
+            // Disable download button and show animated text
+            downloadButton.disabled = true;
+            downloadButton.style.opacity = "0.7";
+            downloadButton.style.cursor = "not-allowed";
+            reportCardText.style.display = "none";
+            
+            // Animation logic
+            let dotCount = 0;
+            const loadingInterval = setInterval(() => {
+                dotCount = (dotCount + 1) % 4;
+                const dots = ".".repeat(dotCount);
+                // Alternate between the two phrases based on time
+                const isGenerating = Math.floor(Date.now() / 2000) % 2 === 0;
+                downloadButton.textContent = isGenerating ? `generating report${dots}` : `Please wait${dots}`;
+            }, 500);
+
+            // Trigger batch evaluation
+            fetch("{% url 'evaluate_all' %}")
+                .then(response => response.json())
+                .then(data => {
+                    clearInterval(loadingInterval);
+                    if (data.status === "complete") {
+                        // Update score display
+                        scoringDisplay.textContent = `${data.score} / 100`;
+                        
+                        // Enable download button and restore text
+                        downloadButton.disabled = false;
+                        downloadButton.textContent = "Download PDF";
+                        downloadButton.style.opacity = "1";
+                        downloadButton.style.cursor = "pointer";
+                        reportCardText.style.display = "block";
+                    } else if (data.status === "no_history") {
+                        showNoHistory();
+                    } else {
+                        console.error("Evaluation failed:", data);
+                        downloadButton.textContent = "Evaluation Error";
+                        downloadButton.style.backgroundColor = "#ff4444";
+                    }
+                })
+                .catch(error => {
+                    clearInterval(loadingInterval);
+                    console.error("Error:", error);
+                    downloadButton.textContent = "Connection Error";
+                    downloadButton.style.backgroundColor = "#ff4444";
+                });
+        }
+    });
+
+</script>
 </body>
 </html>
