@@ -25,7 +25,7 @@ Watch the full walkthrough of how Quizzy functions and performs an AI-driven int
    - Resume-job description similarity using MXBAI embeddings (cosine similarity)
 3. **Interview Phase**:
    - Dynamic question generation using open-weights LLM
-   - Document retrieval from ChromaDB with Gemini embeddings
+   - Document retrieval from ChromaDB with MXBAI embeddings
    - Real-time TTS (Kitten TTS) and STT (Whisper)
    - Vision-based posture and emotion detection using MediaPipe and MobileNet
    - Profile summarization using HuggingFace model
